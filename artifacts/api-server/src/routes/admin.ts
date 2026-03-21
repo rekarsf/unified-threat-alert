@@ -4,6 +4,7 @@ import {
   getAuthData, saveAuthData, createPasswordHash, ROLE_SCOPES, addAuditEntry
 } from "../lib/auth.js";
 import { requireAuth, requireScope, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
+import { getActiveSessions } from "../lib/sessionStore.js";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.get("/users", requireScope("admin.users"), (req: AuthenticatedRequest, re
     role: u.role,
     scopes: u.scopes,
     lastLogin: u.lastLogin,
+    createdAt: u.createdAt,
   }));
   res.json({ users });
 });
@@ -57,6 +59,7 @@ router.post("/users", requireScope("admin.users"), (req: AuthenticatedRequest, r
     username: req.auth!.username,
     action: "create_user",
     resource: username,
+    details: `Role: ${role}`,
     ip: req.ip,
   });
   saveAuthData(data);
@@ -67,6 +70,7 @@ router.post("/users", requireScope("admin.users"), (req: AuthenticatedRequest, r
     role: newUser.role,
     scopes: newUser.scopes,
     lastLogin: null,
+    createdAt: newUser.createdAt,
   });
 });
 
@@ -82,10 +86,16 @@ router.put("/users/:userId", requireScope("admin.users"), (req: AuthenticatedReq
     return;
   }
 
-  if (role) {
+  const changes: string[] = [];
+  if (role && role !== user.role) {
+    changes.push(`role: ${user.role} → ${role}`);
     user.role = role;
     user.scopes = scopes ?? ROLE_SCOPES[role] ?? [];
   } else if (scopes) {
+    const added = scopes.filter(s => !user.scopes.includes(s));
+    const removed = user.scopes.filter(s => !scopes.includes(s));
+    if (added.length) changes.push(`+scopes: ${added.join(", ")}`);
+    if (removed.length) changes.push(`-scopes: ${removed.join(", ")}`);
     user.scopes = scopes;
   }
 
@@ -93,6 +103,7 @@ router.put("/users/:userId", requireScope("admin.users"), (req: AuthenticatedReq
     const { hash, salt } = createPasswordHash(password);
     user.passwordHash = hash;
     user.passwordSalt = salt;
+    changes.push("password changed");
   }
 
   addAuditEntry(data, {
@@ -100,11 +111,12 @@ router.put("/users/:userId", requireScope("admin.users"), (req: AuthenticatedReq
     username: req.auth!.username,
     action: "update_user",
     resource: user.username,
+    details: changes.join("; ") || "no changes",
     ip: req.ip,
   });
   saveAuthData(data);
 
-  res.json({ id: user.id, username: user.username, role: user.role, scopes: user.scopes, lastLogin: user.lastLogin });
+  res.json({ id: user.id, username: user.username, role: user.role, scopes: user.scopes, lastLogin: user.lastLogin, createdAt: user.createdAt });
 });
 
 // DELETE /api/admin/users/:userId
@@ -129,6 +141,7 @@ router.delete("/users/:userId", requireScope("admin.users"), (req: Authenticated
     username: req.auth!.username,
     action: "delete_user",
     resource: removed.username,
+    details: `Role was: ${removed.role}`,
     ip: req.ip,
   });
   saveAuthData(data);
@@ -147,13 +160,13 @@ router.post("/settings", requireScope("admin.settings"), (req: AuthenticatedRequ
   const body = req.body as Record<string, unknown>;
 
   const data = getAuthData();
-  // Merge all provided fields into settings; preserve existing keys not sent in this request
   data.settings = { ...(data.settings as Record<string, unknown> ?? {}), ...body };
 
   addAuditEntry(data, {
     userId: req.auth!.id,
     username: req.auth!.username,
     action: "update_settings",
+    details: `Keys updated: ${Object.keys(body).join(", ")}`,
     ip: req.ip,
   });
   saveAuthData(data);
@@ -164,9 +177,45 @@ router.post("/settings", requireScope("admin.settings"), (req: AuthenticatedRequ
 // GET /api/admin/audit
 router.get("/audit", requireScope("admin.settings"), (req, res) => {
   const data = getAuthData();
-  const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
-  const entries = data.auditLog.slice(0, limit);
-  res.json({ data: entries, total: data.auditLog.length });
+  const limit = Math.min(parseInt(req.query.limit as string) || 200, 1000);
+  const filterUser = (req.query.user as string) || "";
+  const filterAction = (req.query.action as string) || "";
+  const since = (req.query.since as string) || "";
+  const until = (req.query.until as string) || "";
+
+  let entries = data.auditLog;
+
+  if (filterUser) {
+    const u = filterUser.toLowerCase();
+    entries = entries.filter(e => e.username.toLowerCase().includes(u));
+  }
+  if (filterAction) {
+    const a = filterAction.toLowerCase();
+    entries = entries.filter(e => e.action.toLowerCase().includes(a));
+  }
+  if (since) {
+    const sinceTs = new Date(since).getTime();
+    entries = entries.filter(e => new Date(e.timestamp).getTime() >= sinceTs);
+  }
+  if (until) {
+    const untilTs = new Date(until).getTime();
+    entries = entries.filter(e => new Date(e.timestamp).getTime() <= untilTs);
+  }
+
+  const total = entries.length;
+  entries = entries.slice(0, limit);
+  res.json({ data: entries, total });
+});
+
+// GET /api/admin/sessions
+router.get("/sessions", requireScope("admin.users"), (req, res) => {
+  const sessions = getActiveSessions();
+  res.json({ sessions, total: sessions.length });
+});
+
+// GET /api/admin/roles
+router.get("/roles", requireScope("admin.roles"), (req, res) => {
+  res.json({ roles: ROLE_SCOPES });
 });
 
 export default router;

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../lib/auth.js";
+import { touchSession } from "../lib/sessionStore.js";
 
 export interface AuthenticatedRequest extends Request {
   auth?: {
@@ -25,6 +26,15 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   req.auth = payload;
+
+  touchSession(payload.id, {
+    userId: payload.id,
+    username: payload.username,
+    role: payload.role,
+    ip: req.ip ?? req.socket.remoteAddress ?? "unknown",
+    userAgent: req.headers["user-agent"] ?? "unknown",
+  });
+
   next();
 }
 

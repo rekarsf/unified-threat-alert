@@ -42,11 +42,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   else if (input instanceof Request) url = input.url;
 
   if (token && url.includes('/api/')) {
-    init = init || {};
-    init.headers = {
-      ...init.headers,
-      'Authorization': `Bearer ${token}`
-    };
+    init = { ...init };
+    // Use Headers object so we can safely merge without losing any existing headers
+    // (spreading a Headers instance as a plain object drops all its values)
+    const merged = new Headers(init.headers as HeadersInit | undefined);
+    merged.set('Authorization', `Bearer ${token}`);
+    init.headers = merged;
   }
   
   const response = await originalFetch(input, init);

@@ -27,12 +27,128 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-21T17:35:59.746Z",
+      "lastLogin": "2026-03-21T17:57:29.694Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "4feb2176-0c44-4e5b-8223-41cf5d1b4fd4",
+      "timestamp": "2026-03-21T18:00:11.916Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "delete_user",
+      "resource": "testanalyst",
+      "details": "Role was: analyst",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "f77fc3d5-141d-430c-bb5b-aabf3697a43d",
+      "timestamp": "2026-03-21T17:58:48.991Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "update_user",
+      "resource": "testanalyst",
+      "details": "+scopes: s1.endpoints.manage, s1.alerts.manage, s1.iocs.view; -scopes: map.view",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "050c6c1e-8fca-419f-b85d-dbbe628cb240",
+      "timestamp": "2026-03-21T17:58:17.451Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "update_user",
+      "resource": "testanalyst",
+      "details": "-scopes: s1.iocs.view, lr.logs.view, lr.logs.search",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "5fa56036-a192-4e81-82c4-87737a010177",
+      "timestamp": "2026-03-21T17:57:53.116Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "create_user",
+      "resource": "testanalyst",
+      "details": "Role: analyst",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "45c28aec-edc0-480a-b9a5-fe85c59a0692",
+      "timestamp": "2026-03-21T17:57:29.694Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "d74a40ef-b4a0-4988-bfb8-4bf07b2ee3f2",
+      "timestamp": "2026-03-21T17:54:55.018Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "d7542d81-cc43-49d6-857a-a8545c39012f",
+      "timestamp": "2026-03-21T17:51:46.463Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "eb0cf8b1-b320-4bf5-b114-393a074eacfb",
+      "timestamp": "2026-03-21T17:50:56.744Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "delete_user",
+      "resource": "testcurl",
+      "details": "Role was: analyst",
+      "ip": "::1"
+    },
+    {
+      "id": "900517d4-92a4-4c8f-ad7b-851eb1329c8f",
+      "timestamp": "2026-03-21T17:50:56.639Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "84e8edd7-9dfe-4a4d-a583-800455884557",
+      "timestamp": "2026-03-21T17:50:48.994Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "create_user",
+      "resource": "testcurl",
+      "details": "Role: analyst",
+      "ip": "::1"
+    },
+    {
+      "id": "c8dd8b8e-e623-4990-ba17-f513a980c744",
+      "timestamp": "2026-03-21T17:50:48.913Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "76208118-597b-46ee-a751-723d7f66058b",
+      "timestamp": "2026-03-21T17:49:08.095Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "55da87db-2ffb-4314-bf5c-d4e31af19312",
+      "timestamp": "2026-03-21T17:47:21.486Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
     {
       "id": "ab1b4a0f-7cc6-497a-9da3-8f16ac52b6e7",
       "timestamp": "2026-03-21T17:35:59.747Z",

@@ -36,13 +36,29 @@ A full-stack cybersecurity operations console integrating SentinelOne EDR and Lo
 │   └── api-client-react/   # Generated React Query hooks + types
 ```
 
-## Authentication
+## Authentication & RBAC
 
 - Default credentials: `admin` / `admin`
 - JWT stored in localStorage as `soc_token`
 - Auth data in `artifacts/api-server/soc-auth-data.json` (no DB needed)
-- RBAC scopes: `s1.*`, `lr.*`, `admin.*`, `threat_intel.*`
-- Global fetch interceptor in App.tsx injects JWT for all `/api/` calls
+- RBAC scopes: `map.view`, `s1.*`, `lr.*`, `admin.*`, `threatintel.*`
+- Global fetch interceptor in App.tsx injects JWT for all `/api/` calls using `new Headers()` merge to preserve Content-Type on POST/PUT
+- Session tracking: in-memory `sessionStore.ts` records lastSeen on every authenticated request; expires after 30 min
+
+## Admin Panel (`/admin`) Tabs
+
+| Tab | Scope Required | Description |
+|-----|---------------|-------------|
+| Users | `admin.users` | Create/delete users with inline form; role badges; createdAt + lastLogin columns |
+| RBAC | `admin.users` | Per-user scope editor: 5 groups (Map, S1, LR, ThreatIntel, Admin) with checkbox toggles, Grant/Revoke all, role templates, dirty-state Save |
+| Active Sessions | `admin.users` | Live view of users active in last 30 min (in-memory session store), auto-refreshes every 15 s; stat cards + table with browser/OS detection |
+| Audit Log | `admin.settings` | Filterable by search, action type, username, date range; 6 columns with color-coded actions |
+| API Settings | `admin.settings` | S1 and LR base URL + API token fields |
+
+### API Endpoints (new)
+- `GET /api/admin/sessions` — returns active sessions from in-memory store
+- `GET /api/admin/roles` — returns ROLE_SCOPES map
+- `GET /api/admin/audit?user=&action=&since=&until=&limit=` — filterable audit log
 
 ## Pages & Routes
 

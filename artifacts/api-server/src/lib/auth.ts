@@ -11,6 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "soc-map-center-secret-key-2024";
 
 export const ROLE_SCOPES: Record<string, string[]> = {
   admin: [
+    "map.view",
     "s1.dashboard", "s1.endpoints.view", "s1.endpoints.manage",
     "s1.alerts.view", "s1.alerts.manage", "s1.iocs.view",
     "lr.dashboard", "lr.alarms.view", "lr.alarms.manage",
@@ -19,21 +20,25 @@ export const ROLE_SCOPES: Record<string, string[]> = {
     "admin.users", "admin.roles", "admin.settings",
   ],
   analyst: [
+    "map.view",
     "s1.dashboard", "s1.endpoints.view", "s1.alerts.view", "s1.iocs.view",
     "lr.dashboard", "lr.alarms.view", "lr.cases.view", "lr.logs.view", "lr.logs.search",
     "threatintel.view",
   ],
   "s1-operator": [
+    "map.view",
     "s1.dashboard", "s1.endpoints.view", "s1.endpoints.manage",
     "s1.alerts.view", "s1.alerts.manage", "s1.iocs.view",
     "threatintel.view",
   ],
   "lr-operator": [
+    "map.view",
     "lr.dashboard", "lr.alarms.view", "lr.alarms.manage",
     "lr.cases.view", "lr.cases.manage", "lr.logs.view", "lr.logs.search",
     "threatintel.view",
   ],
   readonly: [
+    "map.view",
     "s1.dashboard", "s1.endpoints.view", "s1.alerts.view",
     "lr.dashboard", "lr.alarms.view", "lr.cases.view",
     "threatintel.view",
