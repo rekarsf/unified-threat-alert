@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import {
-  useAdminGetUsers, useAdminGetSettings, useAdminGetAuditLog,
-  useAdminSaveSettings, useAdminCreateUser, useAdminUpdateUser, useAdminDeleteUser
+  useAdminGetUsers, useAdminGetAuditLog,
+  useAdminCreateUser, useAdminUpdateUser, useAdminDeleteUser
 } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Users, Settings, FileText, Shield, Plus, Trash2, Edit, Save,
+  Users, FileText, Shield, Plus, Trash2, Edit, Save,
   Monitor, Globe, Eye, EyeOff, CheckSquare, Square, RefreshCw,
   Wifi, Clock, Filter, Search, X, ChevronDown, UserPlus, Key,
   Lock, Unlock, Tag, Copy
@@ -140,7 +140,7 @@ function RoleBadge({ role }: { role: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'users' | 'rbac' | 'roles' | 'sessions' | 'audit' | 'settings'>('users');
+  const [tab, setTab] = useState<'users' | 'rbac' | 'roles' | 'sessions' | 'audit'>('users');
   const { hasScope } = useAuthStore();
 
   const tabs = [
@@ -149,7 +149,6 @@ export default function AdminPage() {
     { id: 'roles',    label: 'Roles',           icon: <Tag className="w-4 h-4" />,      scope: 'admin.roles' },
     { id: 'sessions', label: 'Active Sessions', icon: <Wifi className="w-4 h-4" />,    scope: 'admin.users' },
     { id: 'audit',    label: 'Audit Log',       icon: <FileText className="w-4 h-4" />, scope: 'admin.settings' },
-    { id: 'settings', label: 'API Settings',    icon: <Settings className="w-4 h-4" />, scope: 'admin.settings' },
   ];
 
   return (
@@ -181,7 +180,6 @@ export default function AdminPage() {
         {tab === 'roles'    && <RolesTab />}
         {tab === 'sessions' && <SessionsTab />}
         {tab === 'audit'    && <AuditTab />}
-        {tab === 'settings' && <SettingsTab />}
       </div>
     </div>
   );
@@ -1164,77 +1162,4 @@ function AuditTab() {
   );
 }
 
-// ─── API Settings Tab ─────────────────────────────────────────────────────────
 
-function SettingsTab() {
-  const { data, isLoading } = useAdminGetSettings();
-  const saveSettings = useAdminSaveSettings();
-  const { toast } = useToast();
-  const [form, setForm] = useState({ s1BaseUrl: '', s1ApiToken: '', lrBaseUrl: '', lrApiToken: '' });
-
-  React.useEffect(() => {
-    if (data) {
-      setForm({
-        s1BaseUrl: (data as any).s1BaseUrl || '',
-        s1ApiToken: (data as any).s1ApiToken || '',
-        lrBaseUrl: (data as any).lrBaseUrl || '',
-        lrApiToken: (data as any).lrApiToken || '',
-      });
-    }
-  }, [data]);
-
-  const handleSave = () => {
-    saveSettings.mutate(form as any, {
-      onSuccess: () => toast({ title: 'Settings saved', description: 'API integration settings updated.' }),
-      onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
-    });
-  };
-
-  const field = (label: string, key: keyof typeof form, placeholder: string, type = 'text') => (
-    <div>
-      <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">{label}</label>
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={form[key]}
-        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-        className="w-full bg-background border border-border rounded-md h-9 px-3 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50"
-      />
-    </div>
-  );
-
-  return (
-    <div className="p-6 max-w-2xl">
-      <h2 className="font-mono text-sm text-muted-foreground uppercase tracking-widest mb-6">API Integration Settings</h2>
-
-      <div className="mb-6 border border-border rounded-lg p-4 space-y-3">
-        <h3 className="font-mono text-sm text-primary font-bold flex items-center gap-2">
-          <Shield className="w-4 h-4" /> SentinelOne EDR
-        </h3>
-        {field('Base URL', 's1BaseUrl', 'https://your-tenant.sentinelone.net')}
-        {field('API Token', 's1ApiToken', 'ApiToken xxxx…', 'password')}
-      </div>
-
-      <div className="mb-6 border border-border rounded-lg p-4 space-y-3">
-        <h3 className="font-mono text-sm text-violet-400 font-bold flex items-center gap-2">
-          <Settings className="w-4 h-4" /> LogRhythm SIEM
-        </h3>
-        {field('Base URL', 'lrBaseUrl', 'https://your-lr-server/lr-api')}
-        {field('API Token', 'lrApiToken', 'Bearer token…', 'password')}
-      </div>
-
-      <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg text-xs font-mono text-muted-foreground mb-4">
-        When API credentials are configured, the dashboard proxies live requests to your SentinelOne and LogRhythm instances. Without credentials, realistic mock data is shown.
-      </div>
-
-      <button
-        onClick={handleSave}
-        disabled={saveSettings.isPending || isLoading}
-        className="flex items-center gap-2 px-6 py-2.5 bg-primary/20 border border-primary/40 text-primary font-mono text-sm rounded-md hover:bg-primary/30 transition-colors disabled:opacity-50"
-      >
-        <Save className="w-4 h-4" />
-        {saveSettings.isPending ? 'Saving…' : 'Save Settings'}
-      </button>
-    </div>
-  );
-}
