@@ -17,6 +17,7 @@ import IocPage from "./pages/iocs";
 import { LrAlarmsPage, LrCasesPage, LrSourcesPage, LrSearchPage, LrListsPage, LrEntitiesPage, LrHostsPage, LrNetworksPage, LrAgentsPage } from "./pages/lr-pages";
 import HackerNewsPage from "./pages/hackernews";
 import AdminPage from "./pages/admin";
+import MapFullscreenPage from "./pages/map-fullscreen";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -121,6 +122,9 @@ function Router() {
       <Route path="/lr/hosts"><ProtectedRoute component={LrHostsPage} /></Route>
       <Route path="/lr/networks"><ProtectedRoute component={LrNetworksPage} /></Route>
       <Route path="/lr/agents"><ProtectedRoute component={LrAgentsPage} /></Route>
+      
+      {/* Full-screen Map */}
+      <Route path="/map"><ProtectedRoute component={MapFullscreenPage} /></Route>
       
       {/* Threat Intelligence */}
       <Route path="/feeds/hackernews"><ProtectedRoute component={HackerNewsPage} /></Route>

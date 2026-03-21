@@ -2,7 +2,7 @@
 
 ## Overview
 
-A full-stack cybersecurity operations console integrating SentinelOne EDR and LogRhythm SIEM. Features a dark cyberpunk aesthetic, canvas-based 2D world map with endpoint markers and threat arcs, JWT RBAC authentication, and full navigation across all SOC operations panels.
+A full-stack cybersecurity operations console integrating SentinelOne EDR and LogRhythm SIEM. Features a dark cyberpunk aesthetic, canvas-based 2D world map with hexagonal endpoint markers, animated particle threat arcs, zoom/pan, JWT RBAC authentication, and full navigation across all SOC operations panels. Includes a dedicated full-screen Global Map view at `/map`.
 
 ## Stack
 

@@ -3,7 +3,8 @@ import { Link, useLocation } from 'wouter';
 import {
   Shield, Activity, Database, AlertTriangle, Crosshair, Server, Users, Settings,
   LogOut, ChevronLeft, ChevronRight, Menu, Bell, Monitor, Laptop, Network,
-  Building, List, Search, FileText, Rss, Briefcase, Hash, ChevronDown, ChevronRight as ChevronRightSm
+  Building, List, Search, FileText, Rss, Briefcase, Hash, ChevronDown, ChevronRight as ChevronRightSm,
+  Globe, Maximize2
 } from 'lucide-react';
 import { useAuthStore, useAppStore } from '@/lib/store';
 import { EndpointDetailPanel } from './panels';
@@ -137,6 +138,7 @@ export function Sidebar() {
       icon: <Shield className="w-3.5 h-3.5" />,
       items: [
         { label: "S1 Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
+        { label: "Global Map", path: "/map", icon: <Globe className="w-4 h-4" /> },
         { label: "Endpoints", path: "/assets/endpoints", icon: <Server className="w-4 h-4" /> },
         { label: "Servers", path: "/assets/servers", icon: <Server className="w-4 h-4" /> },
         { label: "Workstations", path: "/assets/workstations", icon: <Monitor className="w-4 h-4" /> },
