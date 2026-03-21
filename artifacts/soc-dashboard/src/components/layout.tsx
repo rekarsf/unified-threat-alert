@@ -195,10 +195,11 @@ export function Sidebar() {
       ]
     },
     {
-      title: "Admin",
+      title: "System",
       icon: <Settings className="w-3.5 h-3.5" />,
       items: [
-        { label: "Admin Panel", path: "/admin", icon: <Settings className="w-4 h-4" /> },
+        { label: "Admin Panel", path: "/admin", icon: <Shield className="w-4 h-4" /> },
+        { label: "Settings", path: "/settings", icon: <Settings className="w-4 h-4" /> },
       ]
     }
   ];

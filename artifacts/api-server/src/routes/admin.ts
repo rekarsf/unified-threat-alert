@@ -144,12 +144,11 @@ router.get("/settings", requireScope("admin.settings"), (req, res) => {
 
 // POST /api/admin/settings
 router.post("/settings", requireScope("admin.settings"), (req: AuthenticatedRequest, res) => {
-  const { s1BaseUrl, s1ApiToken, lrBaseUrl, lrApiToken } = req.body as {
-    s1BaseUrl?: string; s1ApiToken?: string; lrBaseUrl?: string; lrApiToken?: string;
-  };
+  const body = req.body as Record<string, unknown>;
 
   const data = getAuthData();
-  data.settings = { s1BaseUrl, s1ApiToken, lrBaseUrl, lrApiToken };
+  // Merge all provided fields into settings; preserve existing keys not sent in this request
+  data.settings = { ...(data.settings as Record<string, unknown> ?? {}), ...body };
 
   addAuditEntry(data, {
     userId: req.auth!.id,

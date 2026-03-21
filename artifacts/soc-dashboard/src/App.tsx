@@ -17,6 +17,7 @@ import IocPage from "./pages/iocs";
 import { LrAlarmsPage, LrCasesPage, LrSourcesPage, LrSearchPage, LrListsPage, LrEntitiesPage, LrHostsPage, LrNetworksPage, LrAgentsPage } from "./pages/lr-pages";
 import HackerNewsPage from "./pages/hackernews";
 import AdminPage from "./pages/admin";
+import SettingsPage from "./pages/settings";
 import MapFullscreenPage from "./pages/map-fullscreen";
 import NotFound from "@/pages/not-found";
 
@@ -131,6 +132,9 @@ function Router() {
       
       {/* Admin */}
       <Route path="/admin"><ProtectedRoute component={AdminPage} /></Route>
+      
+      {/* Settings */}
+      <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       
       <Route component={NotFound} />
     </Switch>

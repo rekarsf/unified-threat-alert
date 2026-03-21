@@ -71,6 +71,7 @@ A full-stack cybersecurity operations console integrating SentinelOne EDR and Lo
 | `/lr/agents` | LrAgentsPage | LR agents |
 | `/feeds/hackernews` | HackerNewsPage | Threat intel from Hacker News |
 | `/admin` | AdminPage | Admin panel (users, settings, audit) |
+| `/settings` | SettingsPage | Center settings + all integration credentials |
 
 ## API Endpoints
 
