@@ -107,6 +107,15 @@ When no real API credentials are configured, the backend returns realistic mock 
 - Active threats, alerts, IOCs
 - LR alarms, cases, log sources, hosts, networks, entities, agents, lists
 
+## Cross-Platform Support (Windows + Linux)
+
+- **`cross-env`**: API server dev script uses `cross-env NODE_ENV=development` so the build works on Windows CMD/PowerShell and all Linux shells without any `export` hacks
+- **Preinstall guard**: `scripts/check-pnpm.js` (pure Node.js, no bash) enforces pnpm and removes npm/yarn lockfiles on all platforms
+- **Line endings**: `.gitattributes` enforces LF on commit for all text files; prevents CRLF issues on Windows
+- **Binary overrides**: `pnpm-workspace.yaml` excludes macOS, Android, FreeBSD, and obscure arch binaries to reduce install size, but **Windows x64 and Linux x64 native binaries are included** for esbuild, rollup, lightningcss, and tailwindcss so builds work natively on both platforms
+- **Node version**: `.nvmrc` pins Node 24 — recognized by nvm (Linux/macOS) and nvm-windows
+- **`prefer-frozen-lockfile=false`** in `.npmrc` so Windows developers can reinstall without lockfile mismatch errors
+
 ## Notes
 
 - No database used — auth data stored in `soc-auth-data.json`
