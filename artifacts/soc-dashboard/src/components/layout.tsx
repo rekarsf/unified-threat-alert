@@ -161,12 +161,12 @@ function useVendorNames() {
     enabled: !!token,
   });
   const vendors: { category: string; displayName: string; enabled: boolean }[] = data?.vendors || [];
-  const first = (cat: string) => vendors.find(v => v.category === cat && v.enabled)?.displayName;
+  const first = (cat: string) => vendors.find(v => v.category === cat && v.enabled)?.displayName ?? null;
   return {
-    edrName: first('edr') || 'EDR Platform',
-    xdrName: first('xdr') || null,
-    siemName: first('siem') || 'SIEM Platform',
-    soarName: first('soar') || null,
+    edrName: first('edr'),
+    xdrName: first('xdr'),
+    siemName: first('siem'),
+    soarName: first('soar'),
   };
 }
 
@@ -176,7 +176,7 @@ export function Sidebar() {
   const { edrName, xdrName, siemName, soarName } = useVendorNames();
 
   const navGroups: NavGroup[] = [
-    {
+    ...(edrName ? [{
       title: edrName,
       icon: <Shield className="w-3.5 h-3.5" />,
       items: [
@@ -188,7 +188,7 @@ export function Sidebar() {
         { label: "Vuln Apps", path: "/assets/vuln-apps", icon: <AlertTriangle className="w-4 h-4" /> },
         { label: "Rogues", path: "/assets/rogues", icon: <Laptop className="w-4 h-4" /> },
       ]
-    },
+    }] : []),
     ...(xdrName ? [{
       title: xdrName,
       icon: <Zap className="w-3.5 h-3.5" />,
@@ -206,7 +206,7 @@ export function Sidebar() {
         { label: "Threat IOCs", path: "/iocs", icon: <Crosshair className="w-4 h-4" /> },
       ]
     },
-    {
+    ...(siemName ? [{
       title: siemName,
       icon: <Database className="w-3.5 h-3.5" />,
       items: [
@@ -221,7 +221,7 @@ export function Sidebar() {
         { label: "Networks", path: "/lr/networks", icon: <Network className="w-4 h-4" /> },
         { label: "Agents", path: "/lr/agents", icon: <Shield className="w-4 h-4" /> },
       ]
-    },
+    }] : []),
     ...(soarName ? [{
       title: soarName,
       icon: <Settings className="w-3.5 h-3.5" />,

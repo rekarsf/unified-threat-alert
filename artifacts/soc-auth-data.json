@@ -27,12 +27,39 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-21T18:35:54.217Z",
+      "lastLogin": "2026-03-21T18:41:19.344Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "6bd23ab8-eceb-4ef9-8d07-9adb2df7a274",
+      "timestamp": "2026-03-21T18:42:06.763Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "create_vendor",
+      "resource": "Splunk Enterprise",
+      "details": "category: siem",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "6c071ee0-2bae-48cb-9099-e7abcff40369",
+      "timestamp": "2026-03-21T18:41:31.427Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "delete_vendor",
+      "resource": "SentinelOne",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "e23d322f-3758-42c7-a67f-8abb4fce4938",
+      "timestamp": "2026-03-21T18:41:19.344Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
     {
       "id": "d74c3a3b-857b-4b79-ba39-9492a4a76eba",
       "timestamp": "2026-03-21T18:36:41.514Z",
@@ -272,17 +299,17 @@
   "customRoles": [],
   "vendors": [
     {
-      "id": "05b02047-26d4-4736-82d2-2727fa9c8122",
-      "category": "edr",
-      "displayName": "SentinelOne",
-      "baseUrl": "https://test.sentinelone.net",
+      "id": "5c7b8794-f5ba-4dc2-ab0d-b860271851fe",
+      "category": "siem",
+      "displayName": "Splunk Enterprise",
+      "baseUrl": "https://splunk.test",
       "apiKey": "",
-      "apiDocsUrl": "https://usea1.sentinelone.net/api-doc/overview",
-      "description": "AI-powered endpoint protection",
+      "apiDocsUrl": "https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTprolog",
+      "description": "Data platform for security operations",
       "enabled": true,
       "order": 1,
-      "createdAt": "2026-03-21T18:36:41.514Z",
-      "updatedAt": "2026-03-21T18:36:41.514Z"
+      "createdAt": "2026-03-21T18:42:06.763Z",
+      "updatedAt": "2026-03-21T18:42:06.763Z"
     }
   ]
 }
