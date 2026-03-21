@@ -1,8 +1,8 @@
-# SOC Map Center
+# Unified Threat Alert
 
 ## Overview
 
-A full-stack cybersecurity operations console integrating SentinelOne EDR and LogRhythm SIEM. Features a dark cyberpunk aesthetic, canvas-based 2D world map with hexagonal endpoint markers, animated particle threat arcs, zoom/pan, JWT RBAC authentication, and full navigation across all SOC operations panels. Includes a dedicated full-screen Global Map view at `/map`.
+A vendor-agnostic, full-stack SOC (Security Operations Center) console. Admins configure up to 3 vendors per category (EDR, XDR, SIEM, SOAR) via the Integrations tab; no vendor names appear in the UI unless configured. Features a dark cyberpunk aesthetic, canvas-based 2D world map with animated threat arcs, JWT RBAC authentication, full navigation, and an Admin Panel with 6 tabs (Users, RBAC, Roles, Active Sessions, Audit Log, Integrations).
 
 ## Stack
 

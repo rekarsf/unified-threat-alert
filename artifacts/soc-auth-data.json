@@ -27,12 +27,30 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-21T18:12:45.270Z",
+      "lastLogin": "2026-03-21T18:35:54.217Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "d74c3a3b-857b-4b79-ba39-9492a4a76eba",
+      "timestamp": "2026-03-21T18:36:41.514Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "create_vendor",
+      "resource": "SentinelOne",
+      "details": "category: edr",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "59017d16-87c4-4c6c-b0ae-5e9b3418077c",
+      "timestamp": "2026-03-21T18:35:54.217Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
     {
       "id": "22810c7a-92ba-4400-b8a2-3fe82cf12753",
       "timestamp": "2026-03-21T18:14:16.119Z",
@@ -251,5 +269,20 @@
       "ip": "::ffff:127.0.0.1"
     }
   ],
-  "customRoles": []
+  "customRoles": [],
+  "vendors": [
+    {
+      "id": "05b02047-26d4-4736-82d2-2727fa9c8122",
+      "category": "edr",
+      "displayName": "SentinelOne",
+      "baseUrl": "https://test.sentinelone.net",
+      "apiKey": "",
+      "apiDocsUrl": "https://usea1.sentinelone.net/api-doc/overview",
+      "description": "AI-powered endpoint protection",
+      "enabled": true,
+      "order": 1,
+      "createdAt": "2026-03-21T18:36:41.514Z",
+      "updatedAt": "2026-03-21T18:36:41.514Z"
+    }
+  ]
 }

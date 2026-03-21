@@ -8,7 +8,7 @@ import {
   Users, FileText, Shield, Plus, Trash2, Edit, Save,
   Monitor, Globe, Eye, EyeOff, CheckSquare, Square, RefreshCw,
   Wifi, Clock, Filter, Search, X, ChevronDown, UserPlus, Key,
-  Lock, Unlock, Tag, Copy
+  Lock, Unlock, Tag, Copy, ExternalLink, Zap, Database, Server
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -137,18 +137,390 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
+// ─── Integrations Tab ─────────────────────────────────────────────────────────
+
+type VendorCategory = 'edr' | 'xdr' | 'siem' | 'soar';
+
+interface VendorConfig {
+  id: string;
+  category: VendorCategory;
+  displayName: string;
+  baseUrl: string;
+  apiKey: string;
+  apiDocsUrl: string;
+  description: string;
+  enabled: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+const CATEGORY_META: Record<VendorCategory, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
+  edr: { label: 'EDR', icon: <Server className="w-3.5 h-3.5" />, color: 'text-primary', desc: 'Endpoint Detection & Response' },
+  xdr: { label: 'XDR', icon: <Zap className="w-3.5 h-3.5" />, color: 'text-cyan-400', desc: 'Extended Detection & Response' },
+  siem: { label: 'SIEM', icon: <Database className="w-3.5 h-3.5" />, color: 'text-violet-400', desc: 'Security Information & Event Management' },
+  soar: { label: 'SOAR', icon: <Shield className="w-3.5 h-3.5" />, color: 'text-amber-400', desc: 'Security Orchestration, Automation & Response' },
+};
+
+const VENDOR_PRESETS: Record<VendorCategory, { name: string; docsUrl: string; desc: string }[]> = {
+  edr: [
+    { name: 'SentinelOne', docsUrl: 'https://usea1.sentinelone.net/api-doc/overview', desc: 'AI-powered endpoint protection' },
+    { name: 'CrowdStrike Falcon', docsUrl: 'https://falcon.crowdstrike.com/documentation/page/a2a7fc0e/crowdstrike-oauth2-based-apis', desc: 'Cloud-native endpoint protection' },
+    { name: 'Microsoft Defender', docsUrl: 'https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/apis-intro', desc: 'Enterprise endpoint security' },
+  ],
+  xdr: [
+    { name: 'Palo Alto Cortex XDR', docsUrl: 'https://docs-cortex.paloaltonetworks.com/r/Cortex-XDR/Cortex-XDR-API-Reference', desc: 'Extended detection & response platform' },
+    { name: 'Microsoft Sentinel', docsUrl: 'https://learn.microsoft.com/en-us/rest/api/securityinsights/', desc: 'Cloud-native SIEM and XDR' },
+    { name: 'Trend Micro Vision One', docsUrl: 'https://automation.trendmicro.com/xdr/api-v3', desc: 'XDR with threat intelligence' },
+  ],
+  siem: [
+    { name: 'LogRhythm SIEM', docsUrl: 'https://docs.logrhythm.com/docs/rest-api-development', desc: 'Next-gen SIEM with AI analytics' },
+    { name: 'Splunk Enterprise', docsUrl: 'https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTprolog', desc: 'Data platform for security operations' },
+    { name: 'IBM QRadar', docsUrl: 'https://www.ibm.com/docs/en/SS42VS_SHR/com.ibm.qradar.doc/c_rest_api_getting_started.html', desc: 'Enterprise SIEM with behavioral analytics' },
+  ],
+  soar: [
+    { name: 'Palo Alto XSOAR', docsUrl: 'https://xsoar.pan.dev/docs/reference/api/demisto-class', desc: 'Security orchestration & automation' },
+    { name: 'Splunk SOAR', docsUrl: 'https://docs.splunk.com/Documentation/SOAR/current/DevelopApps/ApiQuickStart', desc: 'Automated security operations' },
+    { name: 'IBM SOAR', docsUrl: 'https://developer.ibm.com/apis/catalog/?search=resilient', desc: 'Incident response & automation' },
+  ],
+};
+
+const EMPTY_FORM = { displayName: '', baseUrl: '', apiKey: '', apiDocsUrl: '', description: '', enabled: true };
+
+function IntegrationsTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['/api/admin/vendors'],
+    queryFn: () => apiCall('/api/admin/vendors', 'GET'),
+  });
+
+  const vendors: VendorConfig[] = data?.vendors || [];
+  const byCategory = (cat: VendorCategory) => vendors.filter(v => v.category === cat);
+
+  const [selected, setSelected] = useState<VendorConfig | null>(null);
+  const [creating, setCreating] = useState<VendorCategory | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [showKey, setShowKey] = useState(false);
+
+  const createMut = useMutation({
+    mutationFn: (body: Partial<VendorConfig>) => apiCall('/api/admin/vendors', 'POST', body),
+    onSuccess: (v) => {
+      toast({ title: 'Vendor added', description: `${v.displayName} configured` });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/vendors'] });
+      setCreating(null);
+      setSelected(v);
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<VendorConfig> }) =>
+      apiCall(`/api/admin/vendors/${id}`, 'PUT', body),
+    onSuccess: (v) => {
+      toast({ title: 'Vendor updated', description: `${v.displayName} saved` });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/vendors'] });
+      setSelected(v);
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiCall(`/api/admin/vendors/${id}`, 'DELETE'),
+    onSuccess: () => {
+      toast({ title: 'Vendor removed' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/vendors'] });
+      setSelected(null);
+      setCreating(null);
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const startCreate = (cat: VendorCategory) => {
+    setSelected(null);
+    setCreating(cat);
+    setForm({ ...EMPTY_FORM });
+    setShowKey(false);
+  };
+
+  const selectVendor = (v: VendorConfig) => {
+    setCreating(null);
+    setSelected(v);
+    setForm({ displayName: v.displayName, baseUrl: v.baseUrl, apiKey: '', apiDocsUrl: v.apiDocsUrl, description: v.description, enabled: v.enabled });
+    setShowKey(false);
+  };
+
+  const applyPreset = (preset: typeof VENDOR_PRESETS.edr[0]) => {
+    setForm(f => ({ ...f, displayName: preset.name, apiDocsUrl: preset.docsUrl, description: preset.desc }));
+  };
+
+  const handleSave = () => {
+    if (creating) {
+      createMut.mutate({ ...form, category: creating });
+    } else if (selected) {
+      updateMut.mutate({ id: selected.id, body: form });
+    }
+  };
+
+  const isMutating = createMut.isPending || updateMut.isPending;
+  const activeCategory: VendorCategory | null = creating || (selected?.category ?? null);
+
+  return (
+    <div className="flex h-full" style={{ minHeight: 0 }}>
+      {/* ── Left: vendor directory ───────────────────────────────── */}
+      <div className="w-64 border-r border-border flex-shrink-0 flex flex-col overflow-hidden">
+        <div className="p-3 border-b border-border flex-shrink-0">
+          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+            Vendors ({vendors.length} / {4 * 3} max)
+          </p>
+          <div className="w-full h-1 bg-secondary rounded-full mt-2 overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(vendors.length / 12) * 100}%` }} />
+          </div>
+        </div>
+
+        <div className="overflow-y-auto custom-scrollbar flex-1 py-2">
+          {(Object.keys(CATEGORY_META) as VendorCategory[]).map(cat => {
+            const meta = CATEGORY_META[cat];
+            const catVendors = byCategory(cat);
+            const canAdd = catVendors.length < 3;
+
+            return (
+              <div key={cat} className="mb-3">
+                {/* Category header */}
+                <div className="flex items-center justify-between px-3 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={meta.color}>{meta.icon}</span>
+                    <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${meta.color}`}>{meta.label}</span>
+                    <span className="text-[9px] font-mono text-muted-foreground/50">{catVendors.length}/3</span>
+                  </div>
+                  {canAdd && (
+                    <button
+                      onClick={() => startCreate(cat)}
+                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+                        creating === cat
+                          ? 'border-primary/50 bg-primary/15 text-primary'
+                          : 'border-border text-muted-foreground hover:border-primary/30 hover:text-primary'
+                      }`}
+                    >
+                      {creating === cat ? '…' : '+ Add'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Vendor items */}
+                {catVendors.length === 0 && (
+                  <p className="px-3 py-1 text-[10px] font-mono text-muted-foreground/50 italic">No vendors configured</p>
+                )}
+                {catVendors.map(v => (
+                  <button
+                    key={v.id}
+                    onClick={() => selectVendor(v)}
+                    className={`w-full text-left px-3 py-2 border-b border-border/20 transition-colors ${
+                      selected?.id === v.id && !creating ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-secondary/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${v.enabled ? 'bg-green-400' : 'bg-muted-foreground/30'}`} />
+                        <span className="font-mono text-xs text-foreground truncate">{v.displayName}</span>
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); if (confirm(`Remove ${v.displayName}?`)) deleteMut.mutate(v.id); }}
+                        className="p-0.5 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {v.baseUrl && <p className="text-[9px] font-mono text-muted-foreground/60 pl-4 mt-0.5 truncate">{v.baseUrl}</p>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Right: detail / form ─────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {!creating && !selected ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+            <Globe className="w-10 h-10 opacity-20" />
+            <p className="font-mono text-sm">Select a vendor or add one</p>
+            <div className="flex gap-2">
+              {(Object.keys(CATEGORY_META) as VendorCategory[]).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => startCreate(cat)}
+                  className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors border-border text-muted-foreground hover:border-primary/30 hover:text-primary ${CATEGORY_META[cat].color}`}
+                >
+                  + {CATEGORY_META[cat].label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 max-w-2xl space-y-5">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                {creating ? (
+                  <div className="flex items-center gap-2">
+                    <span className={CATEGORY_META[creating].color}>{CATEGORY_META[creating].icon}</span>
+                    <div>
+                      <h2 className="font-mono text-base font-bold text-foreground">
+                        Add {CATEGORY_META[creating].label} Vendor
+                      </h2>
+                      <p className="text-[10px] font-mono text-muted-foreground">{CATEGORY_META[creating].desc}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={CATEGORY_META[selected!.category].color}>{CATEGORY_META[selected!.category].icon}</span>
+                    <div>
+                      <h2 className="font-mono text-base font-bold text-foreground">{selected!.displayName}</h2>
+                      <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${CATEGORY_META[selected!.category].color}`}>
+                        {CATEGORY_META[selected!.category].label}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* API docs link */}
+              {(selected?.apiDocsUrl || form.apiDocsUrl) && (
+                <a
+                  href={selected?.apiDocsUrl || form.apiDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-[10px] font-mono text-primary border border-primary/30 bg-primary/10 px-3 py-1.5 rounded hover:bg-primary/20 transition-colors whitespace-nowrap"
+                >
+                  <ExternalLink className="w-3 h-3" /> API Docs
+                </a>
+              )}
+            </div>
+
+            {/* Preset chips (create mode only) */}
+            {creating && (
+              <div>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-2">
+                  Quick-select a vendor
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {VENDOR_PRESETS[creating].map(preset => (
+                    <button
+                      key={preset.name}
+                      onClick={() => applyPreset(preset)}
+                      className="text-[10px] font-mono px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Enabled toggle */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setForm(f => ({ ...f, enabled: !f.enabled }))}
+                className={`relative w-11 h-6 rounded-full transition-colors ${form.enabled ? 'bg-primary' : 'bg-secondary'}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${form.enabled ? 'left-5.5 translate-x-0.5' : 'left-0.5'}`} />
+              </button>
+              <span className="font-mono text-xs text-foreground">{form.enabled ? 'Enabled — active integration' : 'Disabled — integration paused'}</span>
+            </div>
+
+            {/* Form fields */}
+            <div className="space-y-4">
+              {[
+                { key: 'displayName', label: 'Vendor Name', placeholder: 'e.g., CrowdStrike Falcon', type: 'text' },
+                { key: 'baseUrl', label: 'Base URL', placeholder: 'https://api.vendor.com/v1', type: 'text' },
+                { key: 'apiDocsUrl', label: 'API Documentation URL', placeholder: 'https://docs.vendor.com/api-reference', type: 'text' },
+                { key: 'description', label: 'Description', placeholder: 'Brief description of this integration…', type: 'text' },
+              ].map(({ key, label, placeholder, type }) => (
+                <div key={key}>
+                  <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1.5">{label}</label>
+                  <input
+                    type={type}
+                    value={(form as any)[key]}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full bg-background border border-border rounded-md h-9 px-3 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50"
+                  />
+                </div>
+              ))}
+
+              {/* API Key — special handling */}
+              <div>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1.5">API Key / Token</label>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={form.apiKey}
+                    onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
+                    placeholder={selected ? 'Enter new key to update, leave blank to keep' : 'Paste your API key or Bearer token'}
+                    className="w-full bg-background border border-border rounded-md h-9 pl-3 pr-10 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(s => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">Stored encrypted. Never exposed in API responses.</p>
+              </div>
+            </div>
+
+            {/* Properties summary (edit mode) */}
+            {selected && (
+              <div className="border border-border rounded-lg p-4 bg-card/30 space-y-2">
+                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3">Connection Properties</p>
+                {[
+                  { label: 'Status', value: selected.enabled ? '● Active' : '○ Disabled', className: selected.enabled ? 'text-green-400' : 'text-muted-foreground' },
+                  { label: 'Category', value: CATEGORY_META[selected.category].desc },
+                  { label: 'Base URL', value: selected.baseUrl || '—' },
+                  { label: 'API Key', value: selected.apiKey ? '••••••••' : 'Not set' },
+                  { label: 'Configured', value: selected.createdAt ? format(new Date(selected.createdAt), 'yyyy-MM-dd') : '—' },
+                ].map(({ label, value, className }) => (
+                  <div key={label} className="flex items-start gap-3">
+                    <span className="text-[10px] font-mono text-muted-foreground w-24 flex-shrink-0">{label}</span>
+                    <span className={`text-[10px] font-mono ${className ?? 'text-foreground'} break-all`}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Save button */}
+            <button
+              onClick={handleSave}
+              disabled={isMutating || !form.displayName.trim()}
+              className="w-full flex items-center justify-center gap-2 text-sm font-mono text-primary border border-primary/40 bg-primary/10 py-3 rounded-lg hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {isMutating ? 'Saving…' : creating ? `Add ${CATEGORY_META[creating].label} Vendor` : 'Save Changes'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'users' | 'rbac' | 'roles' | 'sessions' | 'audit'>('users');
+  const [tab, setTab] = useState<'users' | 'rbac' | 'roles' | 'sessions' | 'audit' | 'integrations'>('users');
   const { hasScope } = useAuthStore();
 
   const tabs = [
     { id: 'users',    label: 'Users',           icon: <Users className="w-4 h-4" />,    scope: 'admin.users' },
     { id: 'rbac',     label: 'RBAC',            icon: <Key className="w-4 h-4" />,      scope: 'admin.users' },
     { id: 'roles',    label: 'Roles',           icon: <Tag className="w-4 h-4" />,      scope: 'admin.roles' },
-    { id: 'sessions', label: 'Active Sessions', icon: <Wifi className="w-4 h-4" />,    scope: 'admin.users' },
-    { id: 'audit',    label: 'Audit Log',       icon: <FileText className="w-4 h-4" />, scope: 'admin.settings' },
+    { id: 'sessions',      label: 'Active Sessions', icon: <Wifi className="w-4 h-4" />,       scope: 'admin.users' },
+    { id: 'audit',         label: 'Audit Log',       icon: <FileText className="w-4 h-4" />,    scope: 'admin.settings' },
+    { id: 'integrations',  label: 'Integrations',    icon: <Globe className="w-4 h-4" />,       scope: 'admin.settings' },
   ];
 
   return (
@@ -179,7 +551,8 @@ export default function AdminPage() {
         {tab === 'rbac'     && <RbacTab />}
         {tab === 'roles'    && <RolesTab />}
         {tab === 'sessions' && <SessionsTab />}
-        {tab === 'audit'    && <AuditTab />}
+        {tab === 'audit'         && <AuditTab />}
+        {tab === 'integrations'  && <IntegrationsTab />}
       </div>
     </div>
   );

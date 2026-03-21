@@ -65,15 +65,27 @@ export interface CustomRole {
   updatedAt: string;
 }
 
+export type VendorCategory = 'edr' | 'xdr' | 'siem' | 'soar';
+
+export interface VendorConfig {
+  id: string;
+  category: VendorCategory;
+  displayName: string;
+  baseUrl: string;
+  apiKey: string;
+  apiDocsUrl: string;
+  description: string;
+  enabled: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthData {
   users: StoredUser[];
   customRoles: CustomRole[];
-  settings: {
-    s1BaseUrl?: string;
-    s1ApiToken?: string;
-    lrBaseUrl?: string;
-    lrApiToken?: string;
-  };
+  vendors: VendorConfig[];
+  settings: Record<string, unknown>;
   auditLog: AuditEntry[];
 }
 
@@ -113,6 +125,7 @@ function loadData(): AuthData {
         },
       ],
       customRoles: [],
+      vendors: [],
       settings: {},
       auditLog: [],
     };
@@ -120,11 +133,10 @@ function loadData(): AuthData {
     return data;
   }
   const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as AuthData;
-  // Migrate existing files that predate the customRoles field
-  if (!data.customRoles) {
-    data.customRoles = [];
-    saveData(data);
-  }
+  let dirty = false;
+  if (!data.customRoles) { data.customRoles = []; dirty = true; }
+  if (!data.vendors) { data.vendors = []; dirty = true; }
+  if (dirty) saveData(data);
   return data;
 }
 

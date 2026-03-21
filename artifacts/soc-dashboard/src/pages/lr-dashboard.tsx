@@ -25,7 +25,7 @@ export default function LrDashboard() {
             <Database className="w-6 h-6 text-primary" />
             SIEM OPERATIONS
           </h1>
-          <p className="text-muted-foreground font-mono text-sm mt-1">LogRhythm Correlation & Analysis</p>
+          <p className="text-muted-foreground font-mono text-sm mt-1">SIEM Correlation & Analysis</p>
         </div>
       </div>
 

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import crypto from "crypto";
 import {
-  getAuthData, saveAuthData, createPasswordHash, ROLE_SCOPES, addAuditEntry, type CustomRole
+  getAuthData, saveAuthData, createPasswordHash, ROLE_SCOPES, addAuditEntry,
+  type CustomRole, type VendorConfig, type VendorCategory
 } from "../lib/auth.js";
 import { requireAuth, requireScope, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
 import { getActiveSessions } from "../lib/sessionStore.js";
@@ -324,10 +325,125 @@ router.delete("/roles/:roleId", requireScope("admin.roles"), (req: Authenticated
 
 const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
   admin: "Full access to all systems and administration",
-  analyst: "Read and investigate across S1, LR, and Threat Intel",
-  "s1-operator": "Full SentinelOne EDR operations + Threat Intel",
-  "lr-operator": "Full LogRhythm SIEM operations + Threat Intel",
-  readonly: "View-only access across S1 and LR dashboards",
+  analyst: "Read and investigate across EDR, SIEM, and Threat Intel",
+  "s1-operator": "Full EDR operations + Threat Intel",
+  "lr-operator": "Full SIEM operations + Threat Intel",
+  readonly: "View-only access across EDR and SIEM dashboards",
 };
+
+// ─── Vendor CRUD ─────────────────────────────────────────────────────────────
+
+const VALID_CATEGORIES: VendorCategory[] = ['edr', 'xdr', 'siem', 'soar'];
+
+// GET /api/admin/vendors — all users with auth can read (for nav display names)
+router.get("/vendors", (req, res) => {
+  const data = getAuthData();
+  // Mask API keys for GET requests
+  const vendors = data.vendors.map(v => ({ ...v, apiKey: v.apiKey ? '••••••••' : '' }));
+  res.json({ vendors });
+});
+
+// POST /api/admin/vendors — create vendor
+router.post("/vendors", requireScope("admin.settings"), (req: AuthenticatedRequest, res) => {
+  const { category, displayName, baseUrl, apiKey, apiDocsUrl, description, enabled } =
+    req.body as Partial<VendorConfig>;
+
+  if (!category || !VALID_CATEGORIES.includes(category)) {
+    res.status(400).json({ error: "bad_request", message: "Valid category (edr|xdr|siem|soar) required" });
+    return;
+  }
+  if (!displayName?.trim()) {
+    res.status(400).json({ error: "bad_request", message: "Display name required" });
+    return;
+  }
+
+  const data = getAuthData();
+  const inCategory = data.vendors.filter(v => v.category === category);
+  if (inCategory.length >= 3) {
+    res.status(409).json({ error: "limit_reached", message: `Maximum 3 vendors per category (${category})` });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const vendor: VendorConfig = {
+    id: crypto.randomUUID(),
+    category,
+    displayName: displayName.trim(),
+    baseUrl: baseUrl ?? '',
+    apiKey: apiKey ?? '',
+    apiDocsUrl: apiDocsUrl ?? '',
+    description: description ?? '',
+    enabled: enabled !== false,
+    order: inCategory.length + 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  data.vendors.push(vendor);
+  addAuditEntry(data, {
+    userId: req.auth!.id,
+    username: req.auth!.username,
+    action: "create_vendor",
+    resource: vendor.displayName,
+    details: `category: ${category}`,
+    ip: req.ip,
+  });
+  saveAuthData(data);
+  res.status(201).json({ ...vendor, apiKey: vendor.apiKey ? '••••••••' : '' });
+});
+
+// PUT /api/admin/vendors/:vendorId — update vendor
+router.put("/vendors/:vendorId", requireScope("admin.settings"), (req: AuthenticatedRequest, res) => {
+  const { vendorId } = req.params;
+  const { displayName, baseUrl, apiKey, apiDocsUrl, description, enabled } =
+    req.body as Partial<VendorConfig>;
+
+  const data = getAuthData();
+  const vendor = data.vendors.find(v => v.id === vendorId);
+  if (!vendor) {
+    res.status(404).json({ error: "not_found", message: "Vendor not found" });
+    return;
+  }
+
+  if (displayName !== undefined) vendor.displayName = displayName.trim();
+  if (baseUrl !== undefined) vendor.baseUrl = baseUrl;
+  if (apiKey !== undefined && apiKey !== '••••••••') vendor.apiKey = apiKey;
+  if (apiDocsUrl !== undefined) vendor.apiDocsUrl = apiDocsUrl;
+  if (description !== undefined) vendor.description = description;
+  if (enabled !== undefined) vendor.enabled = enabled;
+  vendor.updatedAt = new Date().toISOString();
+
+  addAuditEntry(data, {
+    userId: req.auth!.id,
+    username: req.auth!.username,
+    action: "update_vendor",
+    resource: vendor.displayName,
+    details: `category: ${vendor.category}`,
+    ip: req.ip,
+  });
+  saveAuthData(data);
+  res.json({ ...vendor, apiKey: vendor.apiKey ? '••••••••' : '' });
+});
+
+// DELETE /api/admin/vendors/:vendorId
+router.delete("/vendors/:vendorId", requireScope("admin.settings"), (req: AuthenticatedRequest, res) => {
+  const { vendorId } = req.params;
+  const data = getAuthData();
+  const idx = data.vendors.findIndex(v => v.id === vendorId);
+  if (idx === -1) {
+    res.status(404).json({ error: "not_found", message: "Vendor not found" });
+    return;
+  }
+  const [removed] = data.vendors.splice(idx, 1);
+  addAuditEntry(data, {
+    userId: req.auth!.id,
+    username: req.auth!.username,
+    action: "delete_vendor",
+    resource: removed.displayName,
+    ip: req.ip,
+  });
+  saveAuthData(data);
+  res.json({ success: true });
+});
 
 export default router;

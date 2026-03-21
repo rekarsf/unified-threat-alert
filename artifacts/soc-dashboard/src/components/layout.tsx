@@ -6,9 +6,12 @@ import {
   Building, List, Search, FileText, Rss, Briefcase, Hash,
   ChevronDown, Globe, PanelLeftClose, PanelLeftOpen, Zap
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore, useAppStore } from '@/lib/store';
 import { EndpointDetailPanel } from './panels';
 import { format } from 'date-fns';
+
+const APP_NAME = 'Unified Threat Alert';
 
 export function TopBar() {
   const { user, clearAuth } = useAuthStore();
@@ -36,7 +39,7 @@ export function TopBar() {
             <Shield className="w-4 h-4 text-primary" />
           </div>
           <span className="font-semibold text-base text-foreground tracking-tight hidden sm:block">
-            SOC Map Center
+            {APP_NAME}
           </span>
         </div>
       </div>
@@ -143,13 +146,38 @@ function SidebarGroup({ group, sidebarOpen, location }: { group: NavGroup; sideb
   );
 }
 
+function useVendorNames() {
+  const { token } = useAuthStore();
+  const { data } = useQuery({
+    queryKey: ['/api/admin/vendors'],
+    queryFn: async () => {
+      const r = await fetch('/api/admin/vendors', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!r.ok) return { vendors: [] };
+      return r.json();
+    },
+    staleTime: 60_000,
+    enabled: !!token,
+  });
+  const vendors: { category: string; displayName: string; enabled: boolean }[] = data?.vendors || [];
+  const first = (cat: string) => vendors.find(v => v.category === cat && v.enabled)?.displayName;
+  return {
+    edrName: first('edr') || 'EDR Platform',
+    xdrName: first('xdr') || null,
+    siemName: first('siem') || 'SIEM Platform',
+    soarName: first('soar') || null,
+  };
+}
+
 export function Sidebar() {
   const [location] = useLocation();
   const { sidebarOpen } = useAppStore();
+  const { edrName, xdrName, siemName, soarName } = useVendorNames();
 
   const navGroups: NavGroup[] = [
     {
-      title: "SentinelOne",
+      title: edrName,
       icon: <Shield className="w-3.5 h-3.5" />,
       items: [
         { label: "Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
@@ -161,6 +189,13 @@ export function Sidebar() {
         { label: "Rogues", path: "/assets/rogues", icon: <Laptop className="w-4 h-4" /> },
       ]
     },
+    ...(xdrName ? [{
+      title: xdrName,
+      icon: <Zap className="w-3.5 h-3.5" />,
+      items: [
+        { label: "Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
+      ]
+    }] : []),
     {
       title: "Alerts",
       icon: <AlertTriangle className="w-3.5 h-3.5" />,
@@ -172,7 +207,7 @@ export function Sidebar() {
       ]
     },
     {
-      title: "LogRhythm",
+      title: siemName,
       icon: <Database className="w-3.5 h-3.5" />,
       items: [
         { label: "Dashboard", path: "/lr", icon: <Activity className="w-4 h-4" /> },
@@ -184,9 +219,16 @@ export function Sidebar() {
         { label: "Entities", path: "/lr/entities", icon: <Building className="w-4 h-4" /> },
         { label: "Hosts", path: "/lr/hosts", icon: <Server className="w-4 h-4" /> },
         { label: "Networks", path: "/lr/networks", icon: <Network className="w-4 h-4" /> },
-        { label: "LR Agents", path: "/lr/agents", icon: <Shield className="w-4 h-4" /> },
+        { label: "Agents", path: "/lr/agents", icon: <Shield className="w-4 h-4" /> },
       ]
     },
+    ...(soarName ? [{
+      title: soarName,
+      icon: <Settings className="w-3.5 h-3.5" />,
+      items: [
+        { label: "Playbooks", path: "/lr/cases", icon: <FileText className="w-4 h-4" /> },
+      ]
+    }] : []),
     {
       title: "Threat Intel",
       icon: <Hash className="w-3.5 h-3.5" />,

@@ -43,7 +43,7 @@ export default function Login() {
             <Shield className="w-7 h-7 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">
-            SOC Map Center
+            Unified Threat Alert
           </h1>
           <p className="text-muted-foreground text-sm mt-1.5">
             Sign in to your operations console
