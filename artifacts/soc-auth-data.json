@@ -297,19 +297,5 @@
     }
   ],
   "customRoles": [],
-  "vendors": [
-    {
-      "id": "5c7b8794-f5ba-4dc2-ab0d-b860271851fe",
-      "category": "siem",
-      "displayName": "Splunk Enterprise",
-      "baseUrl": "https://splunk.test",
-      "apiKey": "",
-      "apiDocsUrl": "https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTprolog",
-      "description": "Data platform for security operations",
-      "enabled": true,
-      "order": 1,
-      "createdAt": "2026-03-21T18:42:06.763Z",
-      "updatedAt": "2026-03-21T18:42:06.763Z"
-    }
-  ]
+  "vendors": []
 }
