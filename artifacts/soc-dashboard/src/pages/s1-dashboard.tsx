@@ -1,22 +1,25 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useS1GetAgents, useS1GetThreats, useS1GetAlerts } from '@workspace/api-client-react';
 import { WorldMap } from '@/components/world-map';
-import { CyberCard, CyberBadge } from '@/components/cyber-ui';
-import { Shield, AlertTriangle, Server, Search, Filter, Activity, Maximize2, RotateCcw, Globe, Wifi, WifiOff, ChevronDown } from 'lucide-react';
+import { CyberBadge } from '@/components/cyber-ui';
+import {
+  Shield, AlertTriangle, Server, Search, Activity,
+  Maximize2, RotateCcw, Globe, TrendingUp, Wifi, WifiOff
+} from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'wouter';
 
-const STATUS_OPTIONS = ['All', 'healthy', 'warning', 'threat', 'offline'];
+const STATUS_FILTERS = ['All', 'healthy', 'warning', 'threat', 'offline'] as const;
+type StatusFilter = typeof STATUS_FILTERS[number];
 
 export default function S1Dashboard() {
   useEffect(() => { localStorage.setItem('soc_last_dashboard', '/s1'); }, []);
 
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>('All');
   const [filterCountry, setFilterCountry] = useState('');
   const [search, setSearch] = useState('');
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
 
-  const { data: agentsData, isLoading: agentsLoading, refetch: refetchAgents } = useS1GetAgents({ limit: 1000 });
+  const { data: agentsData, isLoading, refetch } = useS1GetAgents({ limit: 1000 });
   const { data: threatsData } = useS1GetThreats({ limit: 50, resolved: false });
   const { data: alertsData } = useS1GetAlerts({ limit: 30 });
 
@@ -24,124 +27,120 @@ export default function S1Dashboard() {
   const activeThreats = threatsData?.data || [];
   const alerts = alertsData?.data || [];
 
-  // Filtered endpoints
   const endpoints = allEndpoints.filter(ep => {
-    if (search && !ep.hostname.toLowerCase().includes(search.toLowerCase()) &&
-        !ep.ip.includes(search) && !ep.country?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!ep.hostname.toLowerCase().includes(q) && !ep.ip.includes(q) &&
+          !ep.country?.toLowerCase().includes(q)) return false;
+    }
     return true;
   });
 
-  const countries = [...new Set(allEndpoints.map(e => e.country).filter(Boolean))].sort();
+  const countries = [...new Set(allEndpoints.map(e => e.country).filter(Boolean))].sort() as string[];
 
-  const statusCounts = {
+  const counts = {
     healthy: allEndpoints.filter(e => e.status === 'healthy').length,
     warning: allEndpoints.filter(e => e.status === 'warning').length,
     threat: allEndpoints.filter(e => e.status === 'threat').length,
     offline: allEndpoints.filter(e => e.status === 'offline').length,
   };
 
-  const stats = [
-    { label: 'Total Nodes', value: allEndpoints.length, color: 'text-foreground', bg: 'bg-secondary' },
-    { label: 'Threats', value: statusCounts.threat, color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/30' },
-    { label: 'Warnings', value: statusCounts.warning, color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-    { label: 'Offline', value: statusCounts.offline, color: 'text-muted-foreground', bg: 'bg-secondary' },
-  ];
+  const activeAlerts = alerts.filter(a => a.status === 'active');
 
   return (
     <div className="h-full w-full flex flex-col bg-background">
-      {/* Sub-header */}
-      <div className="h-11 border-b border-border bg-card/60 flex items-center px-3 gap-3 shrink-0">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+      {/* Toolbar */}
+      <div className="h-12 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-4 gap-3 shrink-0">
+        <div className="relative w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search hostname, IP, country..."
+            placeholder="Search endpoints, IPs..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full bg-background border border-border rounded h-7 pl-8 pr-3 text-xs font-mono text-foreground focus:outline-none focus:border-primary/50"
+            className="w-full h-8 pl-9 pr-3 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
           />
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex gap-1">
-          {STATUS_OPTIONS.map(s => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s === 'All' ? '' : s)}
-              className={`px-2.5 py-1 text-[10px] font-mono uppercase rounded transition-all ${
-                (s === 'All' && !filterStatus) || filterStatus === s
-                  ? s === 'threat' ? 'bg-destructive/20 text-destructive border border-destructive/50' :
-                    s === 'warning' ? 'bg-warning/20 text-warning border border-warning/50' :
-                    s === 'healthy' ? 'bg-healthy/20 text-healthy border border-healthy/50' :
-                    s === 'offline' ? 'bg-muted text-muted-foreground border border-border' :
-                    'bg-primary/20 text-primary border border-primary/50'
-                  : 'text-muted-foreground border border-border hover:border-primary/30 hover:text-foreground'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+        {/* Status pills */}
+        <div className="flex gap-1.5">
+          {STATUS_FILTERS.map(s => {
+            const active = filterStatus === s;
+            const colorMap: Record<StatusFilter, string> = {
+              All: active ? 'bg-primary/15 text-primary border-primary/40' : 'text-muted-foreground border-border hover:text-foreground hover:border-border/80',
+              healthy: active ? 'bg-healthy/15 text-healthy border-healthy/40' : 'text-muted-foreground border-border hover:text-healthy',
+              warning: active ? 'bg-warning/15 text-warning border-warning/40' : 'text-muted-foreground border-border hover:text-warning',
+              threat: active ? 'bg-destructive/15 text-destructive border-destructive/40' : 'text-muted-foreground border-border hover:text-destructive',
+              offline: active ? 'bg-muted text-foreground border-border' : 'text-muted-foreground border-border hover:text-foreground',
+            };
+            return (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`px-2.5 h-7 text-xs font-medium rounded-md border transition-all capitalize ${colorMap[s]}`}
+              >
+                {s}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Country filter */}
         <select
           value={filterCountry}
           onChange={e => setFilterCountry(e.target.value)}
-          className="bg-background border border-border text-xs font-mono text-muted-foreground h-7 px-2 rounded focus:outline-none focus:border-primary/50"
+          className="h-8 px-2 bg-secondary border border-border rounded-lg text-sm text-muted-foreground focus:outline-none focus:border-primary/40 ml-auto hidden md:block"
         >
           <option value="">All Countries</option>
           {countries.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
-        <div className="flex gap-2 ml-auto">
-          <button
-            onClick={() => refetchAgents()}
-            className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary border border-border bg-background px-2.5 py-1 rounded transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" /> Refresh
-          </button>
-          <Link href="/map" className="flex items-center gap-1.5 text-[10px] font-mono text-primary border border-primary/30 bg-primary/10 px-2.5 py-1 rounded hover:bg-primary/20 transition-colors">
-            <Maximize2 className="w-3 h-3" /> Full Map
-          </Link>
-        </div>
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 h-8 px-3 text-sm text-muted-foreground bg-secondary border border-border rounded-lg hover:text-foreground hover:border-primary/30 transition-all"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        <Link href="/map" className="flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-primary bg-primary/10 border border-primary/25 rounded-lg hover:bg-primary/15 transition-all">
+          <Maximize2 className="w-3.5 h-3.5" />
+          Full Map
+        </Link>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel */}
-        <div className="w-60 border-r border-border bg-card/40 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
-          <div className="p-3 space-y-4">
-            {/* Stats grid */}
+        {/* Left panel */}
+        <div className="w-56 border-r border-border bg-card/30 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+          <div className="p-4 space-y-5">
+            {/* Stats */}
             <div>
-              <div className="text-[9px] font-mono text-muted-foreground tracking-widest uppercase mb-2">Network Status</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {stats.map(s => (
-                  <div key={s.label} className={`p-2.5 rounded border border-border text-center ${s.bg}`}>
-                    <div className={`text-xl font-mono font-bold ${s.color} ${s.label === 'Threats' && s.value > 0 ? 'animate-pulse' : ''}`}>{s.value}</div>
-                    <div className="text-[9px] text-muted-foreground uppercase mt-0.5">{s.label}</div>
-                  </div>
-                ))}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Overview</p>
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard value={allEndpoints.length} label="Total" color="default" />
+                <StatCard value={counts.threat} label="Threats" color="threat" pulse={counts.threat > 0} />
+                <StatCard value={counts.warning} label="Warnings" color="warning" />
+                <StatCard value={counts.offline} label="Offline" color="muted" />
               </div>
             </div>
 
-            {/* Endpoint health bars */}
+            {/* Health bars */}
             <div>
-              <div className="text-[9px] font-mono text-muted-foreground tracking-widest uppercase mb-2">Endpoint Health</div>
-              <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Endpoint Health</p>
+              <div className="space-y-2.5">
                 {[
-                  { label: 'Healthy', count: statusCounts.healthy, color: 'bg-healthy', total: allEndpoints.length },
-                  { label: 'Warning', count: statusCounts.warning, color: 'bg-warning', total: allEndpoints.length },
-                  { label: 'Threat', count: statusCounts.threat, color: 'bg-destructive', total: allEndpoints.length },
-                  { label: 'Offline', count: statusCounts.offline, color: 'bg-muted-foreground', total: allEndpoints.length },
-                ].map(s => (
-                  <div key={s.label}>
-                    <div className="flex justify-between text-[10px] font-mono mb-0.5">
-                      <span className="text-muted-foreground">{s.label}</span>
-                      <span className="text-foreground">{s.count}</span>
+                  { label: 'Healthy', count: counts.healthy, bar: 'bg-healthy' },
+                  { label: 'Warning', count: counts.warning, bar: 'bg-warning' },
+                  { label: 'Threat', count: counts.threat, bar: 'bg-destructive' },
+                  { label: 'Offline', count: counts.offline, bar: 'bg-muted-foreground' },
+                ].map(({ label, count, bar }) => (
+                  <div key={label}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="font-medium text-foreground tabular-nums">{count}</span>
                     </div>
-                    <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                       <div
-                        className={`h-full ${s.color} rounded-full transition-all duration-700`}
-                        style={{ width: s.total > 0 ? `${(s.count / s.total) * 100}%` : '0%' }}
+                        className={`h-full ${bar} rounded-full transition-all duration-700`}
+                        style={{ width: allEndpoints.length > 0 ? `${(count / allEndpoints.length) * 100}%` : '0%' }}
                       />
                     </div>
                   </div>
@@ -152,16 +151,16 @@ export default function S1Dashboard() {
             {/* Active threats */}
             {activeThreats.length > 0 && (
               <div>
-                <div className="text-[9px] font-mono text-destructive tracking-widest uppercase mb-2 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> Active Threats
-                </div>
+                <p className="text-xs font-semibold text-destructive uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Active Threats
+                </p>
                 <div className="space-y-2">
-                  {activeThreats.slice(0, 6).map(threat => (
-                    <div key={threat.id} className="p-2 bg-destructive/5 border border-destructive/20 rounded">
-                      <div className="text-[10px] font-mono text-destructive font-bold truncate">{threat.name}</div>
-                      <div className="flex justify-between mt-1 text-[9px] font-mono text-muted-foreground">
-                        <span className="truncate">{threat.agentComputerName}</span>
-                        <span className="shrink-0 ml-1 uppercase">{threat.severity}</span>
+                  {activeThreats.slice(0, 5).map(t => (
+                    <div key={t.id} className="p-2.5 bg-destructive/5 border border-destructive/20 rounded-lg">
+                      <p className="text-sm font-medium text-destructive truncate">{t.name}</p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs text-muted-foreground truncate">{t.agentComputerName}</p>
+                        <span className="text-xs font-medium text-destructive uppercase shrink-0 ml-1">{t.severity}</span>
                       </div>
                     </div>
                   ))}
@@ -169,26 +168,32 @@ export default function S1Dashboard() {
               </div>
             )}
 
-            {/* Country breakdown */}
+            {/* Countries */}
             {countries.length > 0 && (
               <div>
-                <div className="text-[9px] font-mono text-muted-foreground tracking-widest uppercase mb-2">By Country</div>
-                <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5" /> By Country
+                </p>
+                <div className="space-y-0.5">
                   {countries.slice(0, 8).map(c => {
-                    const count = allEndpoints.filter(e => e.country === c).length;
-                    const threatCount = allEndpoints.filter(e => e.country === c && e.status === 'threat').length;
+                    const total = allEndpoints.filter(e => e.country === c).length;
+                    const threats = allEndpoints.filter(e => e.country === c && e.status === 'threat').length;
                     return (
                       <button
                         key={c}
                         onClick={() => setFilterCountry(filterCountry === c ? '' : c)}
-                        className={`w-full flex items-center justify-between text-[10px] font-mono px-2 py-1 rounded transition-colors ${filterCountry === c ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
+                          filterCountry === c
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
+                        }`}
                       >
-                        <span className="flex items-center gap-1">
-                          <Globe className="w-3 h-3" /> {c}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          {threatCount > 0 && <span className="text-destructive font-bold">⚠{threatCount}</span>}
-                          <span>{count}</span>
+                        <span className="truncate">{c}</span>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          {threats > 0 && (
+                            <span className="text-destructive font-semibold text-xs">⚠ {threats}</span>
+                          )}
+                          <span className="font-medium tabular-nums">{total}</span>
                         </div>
                       </button>
                     );
@@ -201,60 +206,37 @@ export default function S1Dashboard() {
 
         {/* Center: Map */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 relative">
+          <div className="flex-1 relative min-h-0">
             <WorldMap
               endpoints={endpoints as any}
               threats={activeThreats as any}
-              filterStatus={filterStatus || undefined}
+              filterStatus={filterStatus !== 'All' ? filterStatus : undefined}
               filterCountry={filterCountry || undefined}
             />
           </div>
-
-          {/* Live ticker at the bottom of the map */}
-          <LiveTicker alerts={alerts} />
+          <LiveTicker alerts={activeAlerts} />
         </div>
 
-        {/* Right: Live Alert Feed */}
-        <div className="w-64 border-l border-border bg-card/40 flex flex-col shrink-0">
-          <div className="h-9 border-b border-border flex items-center px-3 bg-secondary/50 shrink-0">
-            <h2 className="text-[10px] font-mono font-bold tracking-widest text-primary flex items-center gap-1.5 uppercase">
-              <Activity className="w-3.5 h-3.5" /> Live Alert Feed
-            </h2>
-            <span className="ml-auto text-[9px] text-muted-foreground font-mono">{alerts.filter(a => a.status === 'active').length} active</span>
+        {/* Right: Alert feed */}
+        <div className="w-64 border-l border-border bg-card/30 flex flex-col shrink-0">
+          <div className="h-12 border-b border-border flex items-center px-4 gap-2 shrink-0">
+            <Activity className="w-4 h-4 text-primary" />
+            <span className="text-sm font-semibold text-foreground">Alert Feed</span>
+            {activeAlerts.length > 0 && (
+              <span className="ml-auto text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
+                {activeAlerts.length} active
+              </span>
+            )}
           </div>
-          <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-1.5">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
             {alerts.map(alert => (
-              <div
-                key={alert.id}
-                className={`p-2.5 bg-secondary/50 rounded border transition-colors cursor-pointer group ${
-                  alert.status === 'active' && (alert.severity === 'critical' || alert.severity === 'high')
-                    ? 'border-destructive/40 hover:border-destructive/70'
-                    : 'border-border hover:border-primary/40'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <CyberBadge variant={
-                    alert.severity === 'critical' ? 'threat' :
-                    alert.severity === 'high' ? 'warning' : 'outline'
-                  }>
-                    {alert.severity}
-                  </CyberBadge>
-                  <span className="text-[9px] font-mono text-muted-foreground">
-                    {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
-                  </span>
-                </div>
-                <div className="text-xs font-mono text-foreground line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-                  {alert.name}
-                </div>
-                <div className="text-[9px] font-mono text-muted-foreground mt-1 flex items-center gap-1 truncate">
-                  <Server className="w-2.5 h-2.5 shrink-0" />
-                  {alert.endpointName || 'Unknown Host'}
-                </div>
-              </div>
+              <AlertCard key={alert.id} alert={alert} />
             ))}
             {alerts.length === 0 && (
-              <div className="text-xs font-mono text-muted-foreground text-center py-8">
-                Monitoring system idle...
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Shield className="w-8 h-8 text-muted-foreground/40 mb-2" />
+                <p className="text-sm text-muted-foreground">No alerts</p>
+                <p className="text-xs text-muted-foreground/60 mt-0.5">System monitoring active</p>
               </div>
             )}
           </div>
@@ -264,39 +246,81 @@ export default function S1Dashboard() {
   );
 }
 
+function StatCard({ value, label, color, pulse }: { value: number; label: string; color: string; pulse?: boolean }) {
+  const styles: Record<string, string> = {
+    default: 'bg-secondary border-border text-foreground',
+    threat: 'bg-destructive/8 border-destructive/20 text-destructive',
+    warning: 'bg-warning/8 border-warning/20 text-warning',
+    muted: 'bg-secondary border-border text-muted-foreground',
+  };
+  return (
+    <div className={`p-3 rounded-xl border text-center ${styles[color] || styles.default}`}>
+      <p className={`text-2xl font-bold tabular-nums ${pulse && value > 0 ? 'animate-pulse' : ''}`}>{value}</p>
+      <p className="text-xs font-medium mt-0.5 opacity-70">{label}</p>
+    </div>
+  );
+}
+
+function AlertCard({ alert }: { alert: any }) {
+  const severityColors: Record<string, string> = {
+    critical: 'border-l-destructive',
+    high: 'border-l-orange-500',
+    medium: 'border-l-warning',
+    low: 'border-l-muted-foreground',
+  };
+  const badgeVariant: any = alert.severity === 'critical' ? 'threat' : alert.severity === 'high' ? 'warning' : 'outline';
+
+  return (
+    <div className={`p-3 bg-secondary/50 rounded-xl border border-border border-l-2 ${severityColors[alert.severity] || 'border-l-border'} hover:border-primary/30 transition-colors cursor-pointer group`}>
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <CyberBadge variant={badgeVariant}>{alert.severity}</CyberBadge>
+        <span className="text-xs text-muted-foreground shrink-0">
+          {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
+        </span>
+      </div>
+      <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+        {alert.name}
+      </p>
+      {alert.endpointName && (
+        <div className="flex items-center gap-1.5 mt-2">
+          <Server className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground truncate">{alert.endpointName}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LiveTicker({ alerts }: { alerts: any[] }) {
   const [idx, setIdx] = useState(0);
-  const activeAlerts = alerts.filter(a => a.status === 'active');
 
   useEffect(() => {
-    if (activeAlerts.length <= 1) return;
-    const t = setInterval(() => setIdx(i => (i + 1) % activeAlerts.length), 4000);
+    if (alerts.length <= 1) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % alerts.length), 4500);
     return () => clearInterval(t);
-  }, [activeAlerts.length]);
+  }, [alerts.length]);
 
-  if (activeAlerts.length === 0) return null;
+  if (alerts.length === 0) return null;
 
-  const current = activeAlerts[idx];
+  const current = alerts[idx];
   return (
-    <div className="h-8 bg-destructive/10 border-t border-destructive/30 flex items-center px-4 gap-3 shrink-0 overflow-hidden">
+    <div className="h-9 border-t border-destructive/20 bg-destructive/5 flex items-center px-4 gap-3 shrink-0 overflow-hidden">
       <div className="flex items-center gap-2 shrink-0">
         <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-        <span className="text-[10px] font-mono text-destructive font-bold uppercase tracking-widest">ALERT</span>
+        <span className="text-xs font-semibold text-destructive uppercase tracking-wide">Live</span>
       </div>
-      <div className="flex-1 overflow-hidden">
-        <div
-          key={idx}
-          className="text-[11px] font-mono text-foreground truncate animate-[fadeIn_0.4s_ease]"
-          style={{ animation: 'fadeIn 0.4s ease' }}
-        >
-          [{current.severity?.toUpperCase()}] {current.name}
-          {current.endpointName && <span className="text-muted-foreground ml-2">· {current.endpointName}</span>}
-          <span className="text-muted-foreground/60 ml-2">· {formatDistanceToNow(new Date(current.timestamp), { addSuffix: true })}</span>
-        </div>
+      <div
+        key={idx}
+        className="flex-1 text-sm text-foreground/80 truncate"
+        style={{ animation: 'fadeIn 0.35s ease' }}
+      >
+        <span className="font-medium text-foreground">[{current.severity?.toUpperCase()}]</span>
+        {' '}{current.name}
+        {current.endpointName && <span className="text-muted-foreground"> · {current.endpointName}</span>}
       </div>
-      <div className="text-[9px] font-mono text-muted-foreground shrink-0">
-        {idx + 1}/{activeAlerts.length}
-      </div>
+      <span className="text-xs text-muted-foreground shrink-0 font-mono">
+        {idx + 1}/{alerts.length}
+      </span>
     </div>
   );
 }

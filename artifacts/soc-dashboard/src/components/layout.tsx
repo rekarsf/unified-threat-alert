@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   Shield, Activity, Database, AlertTriangle, Crosshair, Server, Users, Settings,
-  LogOut, ChevronLeft, ChevronRight, Menu, Bell, Monitor, Laptop, Network,
-  Building, List, Search, FileText, Rss, Briefcase, Hash, ChevronDown, ChevronRight as ChevronRightSm,
-  Globe, Maximize2
+  LogOut, Menu, Bell, Monitor, Laptop, Network,
+  Building, List, Search, FileText, Rss, Briefcase, Hash,
+  ChevronDown, Globe, PanelLeftClose, PanelLeftOpen, Zap
 } from 'lucide-react';
 import { useAuthStore, useAppStore } from '@/lib/store';
 import { EndpointDetailPanel } from './panels';
@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 
 export function TopBar() {
   const { user, clearAuth } = useAuthStore();
-  const { notifications, toggleSidebar } = useAppStore();
+  const { notifications, toggleSidebar, sidebarOpen } = useAppStore();
   const unreadCount = notifications.filter(n => !n.read).length;
   const [time, setTime] = useState(new Date());
 
@@ -22,44 +22,54 @@ export function TopBar() {
   }, []);
 
   return (
-    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md flex items-center justify-between px-4 z-30 relative cyber-glow shrink-0">
-      <div className="flex items-center gap-4">
-        <button onClick={toggleSidebar} className="p-2 text-muted-foreground hover:text-primary transition-colors lg:hidden">
-          <Menu className="w-5 h-5" />
+    <header className="h-14 border-b border-border bg-card/70 backdrop-blur-md flex items-center justify-between px-4 z-30 shrink-0 gap-4">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggleSidebar}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {sidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
         </button>
-        <h1 className="font-display font-bold text-xl tracking-widest text-primary text-shadow-cyber hidden sm:block">
-          SOC_MAP_CENTER
-        </h1>
-      </div>
-
-      <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
-        <span className="font-mono text-xs text-muted-foreground uppercase">Global Sync</span>
-        <span className="font-mono text-sm text-foreground tracking-widest bg-secondary/50 px-3 py-1 rounded border border-border">
-          UTC {format(time, 'yyyy-MM-dd HH:mm:ss')}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-6">
-        <div className="relative cursor-pointer group">
-          <Bell className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center rounded-full animate-pulse">
-              {unreadCount}
-            </span>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-3 border-l border-border pl-6">
-          <div className="text-right hidden md:block">
-            <div className="text-sm font-bold text-foreground font-display tracking-wide">{user?.username || 'GUEST'}</div>
-            <div className="text-xs text-primary font-mono uppercase">{user?.role || 'ANALYST'}</div>
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
+            <Shield className="w-4 h-4 text-primary" />
           </div>
-          <button 
+          <span className="font-semibold text-base text-foreground tracking-tight hidden sm:block">
+            SOC Map Center
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono bg-secondary/60 px-3 py-1 rounded-md border border-border hidden md:flex">
+          <Zap className="w-3.5 h-3.5 text-primary" />
+          <span>{format(time, 'HH:mm:ss')} UTC</span>
+        </div>
+
+        <button className="relative p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors ml-1">
+          <Bell className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
+          )}
+        </button>
+
+        <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-border">
+          <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center">
+            <span className="text-xs font-semibold text-primary">
+              {(user?.username || 'G').charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="hidden md:flex flex-col">
+            <span className="text-sm font-medium text-foreground leading-none">{user?.username || 'Guest'}</span>
+            <span className="text-xs text-primary capitalize leading-none mt-0.5">{user?.role || 'analyst'}</span>
+          </div>
+          <button
             onClick={() => clearAuth()}
-            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-            title="Disconnect"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors ml-1"
+            title="Sign out"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -67,61 +77,66 @@ export function TopBar() {
   );
 }
 
-interface NavItem {
-  label: string;
-  path: string;
-  icon: React.ReactNode;
-}
+interface NavItem { label: string; path: string; icon: React.ReactNode; badge?: number; }
+interface NavGroup { title: string; icon: React.ReactNode; items: NavItem[]; color?: string; }
 
-interface NavGroup {
-  title: string;
-  icon: React.ReactNode;
-  items: NavItem[];
+function SidebarItem({ item, active, sidebarOpen }: { item: NavItem; active: boolean; sidebarOpen: boolean }) {
+  return (
+    <Link
+      href={item.path}
+      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 group relative ${
+        active
+          ? 'bg-primary/12 text-primary'
+          : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'
+      }`}
+      title={!sidebarOpen ? item.label : undefined}
+    >
+      <span className={`shrink-0 w-4 h-4 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'} transition-colors`}>
+        {item.icon}
+      </span>
+      {sidebarOpen && (
+        <span className="text-sm font-medium leading-none flex-1">{item.label}</span>
+      )}
+      {sidebarOpen && active && (
+        <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+      )}
+      {!sidebarOpen && active && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+      )}
+    </Link>
+  );
 }
 
 function SidebarGroup({ group, sidebarOpen, location }: { group: NavGroup; sidebarOpen: boolean; location: string }) {
   const hasActive = group.items.some(item => location === item.path || location.startsWith(item.path + '/'));
-  const [expanded, setExpanded] = useState(hasActive || true);
+  const [expanded, setExpanded] = useState(true);
 
   return (
-    <div className="px-2">
+    <div>
       {sidebarOpen && (
         <button
           onClick={() => setExpanded(e => !e)}
-          className="w-full flex items-center justify-between gap-2 px-3 mb-1 text-xs font-display tracking-widest text-muted-foreground uppercase hover:text-foreground transition-colors py-1"
+          className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors rounded-md"
         >
           <div className="flex items-center gap-2">
-            {group.icon}
+            <span className="text-muted-foreground/70">{group.icon}</span>
             <span>{group.title}</span>
           </div>
-          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRightSm className="w-3 h-3" />}
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`} />
         </button>
       )}
+      {!sidebarOpen && <div className="h-px bg-border/50 mx-2 my-1" />}
       {(expanded || !sidebarOpen) && (
-        <ul className="space-y-0.5">
-          {group.items.map((item) => {
-            const active = location === item.path;
-            return (
-              <li key={item.path}>
-                <Link
-                  href={item.path}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group ${
-                    active
-                      ? 'bg-primary/10 text-primary border border-primary/30'
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'
-                  }`}
-                >
-                  <span className={`shrink-0 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
-                    {item.icon}
-                  </span>
-                  {sidebarOpen && <span className="font-mono text-xs leading-tight">{item.label}</span>}
-                  {sidebarOpen && active && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-                  )}
-                </Link>
-              </li>
-            );
-          })}
+        <ul className="space-y-0.5 mt-0.5">
+          {group.items.map((item) => (
+            <li key={item.path}>
+              <SidebarItem
+                item={item}
+                active={location === item.path}
+                sidebarOpen={sidebarOpen}
+              />
+            </li>
+          ))}
         </ul>
       )}
     </div>
@@ -130,14 +145,14 @@ function SidebarGroup({ group, sidebarOpen, location }: { group: NavGroup; sideb
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { sidebarOpen, toggleSidebar } = useAppStore();
+  const { sidebarOpen } = useAppStore();
 
   const navGroups: NavGroup[] = [
     {
-      title: "SentinelOne EDR",
+      title: "SentinelOne",
       icon: <Shield className="w-3.5 h-3.5" />,
       items: [
-        { label: "S1 Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
+        { label: "Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
         { label: "Global Map", path: "/map", icon: <Globe className="w-4 h-4" /> },
         { label: "Endpoints", path: "/assets/endpoints", icon: <Server className="w-4 h-4" /> },
         { label: "Servers", path: "/assets/servers", icon: <Server className="w-4 h-4" /> },
@@ -151,16 +166,16 @@ export function Sidebar() {
       icon: <AlertTriangle className="w-3.5 h-3.5" />,
       items: [
         { label: "Active Alerts", path: "/alerts/active", icon: <AlertTriangle className="w-4 h-4" /> },
-        { label: "Critical", path: "/alerts/critical", icon: <AlertTriangle className="w-4 h-4" /> },
-        { label: "Alert History", path: "/alerts/history", icon: <FileText className="w-4 h-4" /> },
+        { label: "Critical", path: "/alerts/critical", icon: <Zap className="w-4 h-4" /> },
+        { label: "History", path: "/alerts/history", icon: <FileText className="w-4 h-4" /> },
         { label: "Threat IOCs", path: "/iocs", icon: <Crosshair className="w-4 h-4" /> },
       ]
     },
     {
-      title: "LogRhythm SIEM",
+      title: "LogRhythm",
       icon: <Database className="w-3.5 h-3.5" />,
       items: [
-        { label: "LR Dashboard", path: "/lr", icon: <Activity className="w-4 h-4" /> },
+        { label: "Dashboard", path: "/lr", icon: <Activity className="w-4 h-4" /> },
         { label: "Alarms", path: "/lr/alarms", icon: <Bell className="w-4 h-4" /> },
         { label: "Cases", path: "/lr/cases", icon: <Briefcase className="w-4 h-4" /> },
         { label: "Log Search", path: "/lr/search", icon: <Search className="w-4 h-4" /> },
@@ -180,7 +195,7 @@ export function Sidebar() {
       ]
     },
     {
-      title: "Administration",
+      title: "Admin",
       icon: <Settings className="w-3.5 h-3.5" />,
       items: [
         { label: "Admin Panel", path: "/admin", icon: <Settings className="w-4 h-4" /> },
@@ -189,32 +204,21 @@ export function Sidebar() {
   ];
 
   return (
-    <aside 
-      className={`bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col relative z-20 ${sidebarOpen ? 'w-56' : 'w-14'} overflow-hidden shrink-0`}
+    <aside
+      className={`bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-250 ease-in-out shrink-0 ${sidebarOpen ? 'w-56' : 'w-[52px]'} overflow-hidden`}
     >
-      <div className="h-16 flex items-center justify-center border-b border-sidebar-border shrink-0">
-        <Shield className="w-8 h-8 text-primary cyber-glow rounded-full p-1" />
-      </div>
-
-      <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4 custom-scrollbar">
         {navGroups.map((group, i) => (
           <SidebarGroup key={i} group={group} sidebarOpen={sidebarOpen} location={location} />
         ))}
       </div>
-
-      <button 
-        onClick={toggleSidebar}
-        className="h-12 border-t border-sidebar-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors shrink-0"
-      >
-        {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-      </button>
     </aside>
   );
 }
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { selectedEndpoint } = useAppStore();
-  
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
       <TopBar />
@@ -224,7 +228,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-      
       <EndpointDetailPanel endpoint={selectedEndpoint} />
     </div>
   );
