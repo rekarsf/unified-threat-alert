@@ -3,11 +3,12 @@ import {
   useAdminGetUsers, useAdminGetSettings, useAdminGetAuditLog,
   useAdminSaveSettings, useAdminCreateUser, useAdminUpdateUser, useAdminDeleteUser
 } from '@workspace/api-client-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Settings, FileText, Shield, Plus, Trash2, Edit, Save,
   Monitor, Globe, Eye, EyeOff, CheckSquare, Square, RefreshCw,
-  Wifi, Clock, Filter, Search, X, ChevronDown, UserPlus, Key
+  Wifi, Clock, Filter, Search, X, ChevronDown, UserPlus, Key,
+  Lock, Unlock, Tag, Copy
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -139,15 +140,16 @@ function RoleBadge({ role }: { role: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'users' | 'rbac' | 'sessions' | 'audit' | 'settings'>('users');
+  const [tab, setTab] = useState<'users' | 'rbac' | 'roles' | 'sessions' | 'audit' | 'settings'>('users');
   const { hasScope } = useAuthStore();
 
   const tabs = [
-    { id: 'users',    label: 'Users',        icon: <Users className="w-4 h-4" />,   scope: 'admin.users' },
-    { id: 'rbac',     label: 'RBAC',         icon: <Key className="w-4 h-4" />,     scope: 'admin.users' },
-    { id: 'sessions', label: 'Active Sessions', icon: <Wifi className="w-4 h-4" />, scope: 'admin.users' },
-    { id: 'audit',    label: 'Audit Log',    icon: <FileText className="w-4 h-4" />, scope: 'admin.settings' },
-    { id: 'settings', label: 'API Settings', icon: <Settings className="w-4 h-4" />, scope: 'admin.settings' },
+    { id: 'users',    label: 'Users',           icon: <Users className="w-4 h-4" />,    scope: 'admin.users' },
+    { id: 'rbac',     label: 'RBAC',            icon: <Key className="w-4 h-4" />,      scope: 'admin.users' },
+    { id: 'roles',    label: 'Roles',           icon: <Tag className="w-4 h-4" />,      scope: 'admin.roles' },
+    { id: 'sessions', label: 'Active Sessions', icon: <Wifi className="w-4 h-4" />,    scope: 'admin.users' },
+    { id: 'audit',    label: 'Audit Log',       icon: <FileText className="w-4 h-4" />, scope: 'admin.settings' },
+    { id: 'settings', label: 'API Settings',    icon: <Settings className="w-4 h-4" />, scope: 'admin.settings' },
   ];
 
   return (
@@ -176,6 +178,7 @@ export default function AdminPage() {
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {tab === 'users'    && <UsersTab />}
         {tab === 'rbac'     && <RbacTab />}
+        {tab === 'roles'    && <RolesTab />}
         {tab === 'sessions' && <SessionsTab />}
         {tab === 'audit'    && <AuditTab />}
         {tab === 'settings' && <SettingsTab />}
@@ -495,6 +498,405 @@ function RbacTab() {
                 <Save className="w-4 h-4" />
                 {updateUser.isPending ? 'Saving…' : 'Save Scope Changes'}
               </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Roles Tab ────────────────────────────────────────────────────────────────
+
+interface AnyRole {
+  id: string;
+  name: string;
+  description: string;
+  scopes: string[];
+  builtIn: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+const BUILT_IN_ORDER = ['admin', 'analyst', 's1-operator', 'lr-operator', 'readonly'];
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: 'text-red-400 bg-red-500/10 border-red-500/20',
+  analyst: 'text-primary bg-primary/10 border-primary/20',
+  's1-operator': 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+  'lr-operator': 'text-violet-400 bg-violet-500/10 border-violet-500/20',
+  readonly: 'text-muted-foreground bg-secondary/20 border-border',
+};
+
+function apiCall(path: string, method: string, body?: unknown) {
+  const token = localStorage.getItem('soc_token');
+  return fetch(path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  }).then(async r => {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || `HTTP ${r.status}`);
+    return data;
+  });
+}
+
+function RolesTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['/api/admin/roles'],
+    queryFn: () => apiCall('/api/admin/roles', 'GET'),
+  });
+
+  const builtIn: AnyRole[] = (data?.builtIn || []).map((r: any) => ({ ...r, builtIn: true }));
+  const custom: AnyRole[] = (data?.custom || []).map((r: any) => ({ ...r, builtIn: false }));
+  const total = builtIn.length + custom.length;
+
+  const [selected, setSelected] = useState<AnyRole | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: '', description: '', scopes: [] as string[] });
+  const [dirty, setDirty] = useState(false);
+
+  const createMut = useMutation({
+    mutationFn: (body: { name: string; description: string; scopes: string[] }) =>
+      apiCall('/api/admin/roles', 'POST', body),
+    onSuccess: (role) => {
+      toast({ title: 'Role created', description: `"${role.name}" is now available` });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/roles'] });
+      setCreating(false);
+      setSelected({ ...role, builtIn: false });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<{ name: string; description: string; scopes: string[] }> }) =>
+      apiCall(`/api/admin/roles/${id}`, 'PUT', body),
+    onSuccess: (role) => {
+      toast({ title: 'Role saved', description: `"${role.name}" updated` });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/roles'] });
+      setSelected({ ...role, builtIn: false });
+      setDirty(false);
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiCall(`/api/admin/roles/${id}`, 'DELETE'),
+    onSuccess: () => {
+      toast({ title: 'Role deleted' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/roles'] });
+      setSelected(null);
+      setCreating(false);
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const startCreate = (templateScopes: string[] = []) => {
+    setCreating(true);
+    setSelected(null);
+    setForm({ name: '', description: '', scopes: [...templateScopes] });
+    setDirty(false);
+  };
+
+  const selectRole = (role: AnyRole) => {
+    setCreating(false);
+    setSelected(role);
+    setForm({ name: role.name, description: role.description, scopes: [...role.scopes] });
+    setDirty(false);
+  };
+
+  const toggleScope = (scope: string) => {
+    setForm(f => {
+      const next = f.scopes.includes(scope) ? f.scopes.filter(s => s !== scope) : [...f.scopes, scope];
+      return { ...f, scopes: next };
+    });
+    setDirty(true);
+  };
+
+  const toggleGroupAll = (group: typeof SCOPE_GROUPS[0], grantAll: boolean) => {
+    setForm(f => {
+      const keys = group.scopes.map(s => s.key);
+      const next = grantAll
+        ? [...new Set([...f.scopes, ...keys])]
+        : f.scopes.filter(s => !keys.includes(s));
+      return { ...f, scopes: next };
+    });
+    setDirty(true);
+  };
+
+  const handleSave = () => {
+    if (creating) {
+      if (!form.name.trim()) return toast({ title: 'Role name is required', variant: 'destructive' });
+      createMut.mutate({ name: form.name.trim(), description: form.description, scopes: form.scopes });
+    } else if (selected && !selected.builtIn) {
+      updateMut.mutate({ id: selected.id, body: { description: form.description, scopes: form.scopes } });
+    }
+  };
+
+  const isMutating = createMut.isPending || updateMut.isPending;
+  const isEditing = creating || (selected && !selected.builtIn);
+
+  return (
+    <div className="flex h-full" style={{ minHeight: 0 }}>
+      {/* ── Left: role list ───────────────────────────────── */}
+      <div className="w-64 border-r border-border flex-shrink-0 flex flex-col overflow-hidden">
+        <div className="p-3 border-b border-border flex items-center justify-between flex-shrink-0">
+          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+            Roles ({total})
+          </p>
+          <button
+            onClick={() => creating ? (setCreating(false), setSelected(null)) : startCreate()}
+            className={`flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded border transition-colors ${
+              creating
+                ? 'border-border text-muted-foreground hover:text-foreground'
+                : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
+            }`}
+          >
+            {creating ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> New Role</>}
+          </button>
+        </div>
+
+        <div className="overflow-y-auto custom-scrollbar flex-1">
+          {/* Built-in section */}
+          <div className="px-3 pt-3 pb-1">
+            <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+              <Lock className="w-2.5 h-2.5" /> Built-in
+            </p>
+          </div>
+          {isLoading
+            ? <p className="px-3 py-2 text-xs text-muted-foreground font-mono">Loading…</p>
+            : builtIn.map(role => (
+              <button
+                key={role.id}
+                onClick={() => selectRole(role)}
+                className={`w-full text-left px-3 py-2.5 border-b border-border/30 transition-colors ${
+                  selected?.id === role.id && !creating ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-secondary/20'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                  <span className={`font-mono text-xs font-bold ${ROLE_COLORS[role.name]?.split(' ')[0] ?? 'text-foreground'}`}>{role.name}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground font-mono mt-0.5 pl-5 truncate">{role.description}</p>
+              </button>
+            ))
+          }
+
+          {/* Custom section */}
+          <div className="px-3 pt-3 pb-1">
+            <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+              <Unlock className="w-2.5 h-2.5" /> Custom {custom.length > 0 && `(${custom.length})`}
+            </p>
+          </div>
+          {custom.length === 0 && !isLoading && (
+            <p className="px-3 py-2 text-[10px] text-muted-foreground font-mono italic">No custom roles yet</p>
+          )}
+          {custom.map(role => (
+            <button
+              key={role.id}
+              onClick={() => selectRole(role)}
+              className={`w-full text-left px-3 py-2.5 border-b border-border/30 transition-colors ${
+                selected?.id === role.id && !creating ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-secondary/20'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Tag className="w-3 h-3 text-primary flex-shrink-0" />
+                  <span className="font-mono text-xs font-bold text-primary truncate">{role.name}</span>
+                </div>
+                <button
+                  onClick={e => { e.stopPropagation(); if (confirm(`Delete role "${role.name}"?`)) deleteMut.mutate(role.id); }}
+                  className="p-1 text-muted-foreground hover:text-destructive transition-colors ml-1 flex-shrink-0"
+                  title="Delete"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground font-mono mt-0.5 pl-5 truncate">{role.description || 'No description'}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Right: editor / viewer ────────────────────────── */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {!creating && !selected ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+            <Tag className="w-10 h-10 opacity-20" />
+            <p className="font-mono text-sm">Select a role to view or</p>
+            <button
+              onClick={() => startCreate()}
+              className="flex items-center gap-2 text-xs font-mono text-primary border border-primary/30 bg-primary/10 px-4 py-2 rounded-md hover:bg-primary/20 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Create a new role
+            </button>
+          </div>
+        ) : (
+          <div className="p-6 max-w-2xl space-y-6">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                {creating ? (
+                  <h2 className="font-mono text-base font-bold text-foreground">New Custom Role</h2>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {selected!.builtIn
+                      ? <Lock className="w-4 h-4 text-muted-foreground" />
+                      : <Tag className="w-4 h-4 text-primary" />
+                    }
+                    <h2 className="font-mono text-base font-bold text-foreground">{selected!.name}</h2>
+                    {selected!.builtIn && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-secondary/40 text-muted-foreground border border-border">BUILT-IN</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Fork button for built-in roles */}
+              {selected?.builtIn && (
+                <button
+                  onClick={() => startCreate(selected.scopes)}
+                  className="flex items-center gap-1.5 text-[10px] font-mono text-primary border border-primary/30 bg-primary/10 px-3 py-1.5 rounded hover:bg-primary/20 transition-colors whitespace-nowrap"
+                >
+                  <Copy className="w-3 h-3" /> Fork as Custom
+                </button>
+              )}
+            </div>
+
+            {/* Name field (create mode or custom role) */}
+            {(creating || (selected && !selected.builtIn)) && (
+              <div>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1.5">Role Name</label>
+                <input
+                  value={form.name}
+                  onChange={e => { setForm(f => ({ ...f, name: e.target.value })); if (!creating) setDirty(true); }}
+                  placeholder="e.g. tier-2-analyst"
+                  disabled={!creating}
+                  className="w-full bg-background border border-border rounded-md h-9 px-3 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50 disabled:opacity-60"
+                />
+                {creating && <p className="text-[10px] font-mono text-muted-foreground mt-1">Spaces converted to hyphens, lowercase.</p>}
+              </div>
+            )}
+
+            {/* Description */}
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1.5">Description</label>
+              {selected?.builtIn ? (
+                <p className="font-mono text-sm text-foreground">{selected.description}</p>
+              ) : (
+                <textarea
+                  value={form.description}
+                  onChange={e => { setForm(f => ({ ...f, description: e.target.value })); setDirty(true); }}
+                  placeholder="Describe this role's responsibilities…"
+                  rows={2}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50 resize-none"
+                />
+              )}
+            </div>
+
+            {/* Permissions header */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+                  Permissions
+                  <span className="ml-2 text-primary">{(creating || !selected?.builtIn ? form.scopes : selected!.scopes).length} granted</span>
+                </label>
+                {isEditing && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => { setForm(f => ({ ...f, scopes: SCOPE_GROUPS.flatMap(g => g.scopes.map(s => s.key)) })); setDirty(true); }}
+                      className="text-[10px] font-mono px-2.5 py-1 rounded border border-border text-muted-foreground hover:border-primary/30 hover:text-primary transition-colors"
+                    >All</button>
+                    <button
+                      onClick={() => { setForm(f => ({ ...f, scopes: [] })); setDirty(true); }}
+                      className="text-[10px] font-mono px-2.5 py-1 rounded border border-border text-muted-foreground hover:border-primary/30 hover:text-primary transition-colors"
+                    >None</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Scope groups */}
+              <div className="space-y-4">
+                {SCOPE_GROUPS.map(group => {
+                  const activeScopes = creating || !selected?.builtIn ? form.scopes : selected!.scopes;
+                  const grantedCount = group.scopes.filter(s => activeScopes.includes(s.key)).length;
+                  const allGranted = grantedCount === group.scopes.length;
+
+                  return (
+                    <div key={group.id} className="border border-border rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-card/50 border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{group.icon}</span>
+                          <span className={`font-mono text-xs font-bold uppercase tracking-wide ${group.color}`}>{group.label}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">{grantedCount}/{group.scopes.length}</span>
+                        </div>
+                        {isEditing && (
+                          <button
+                            onClick={() => toggleGroupAll(group, !allGranted)}
+                            className="text-[10px] font-mono text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {allGranted ? 'Revoke all' : 'Grant all'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Two-column grid of checkboxes */}
+                      <div className="grid grid-cols-2 divide-x divide-border/30">
+                        {group.scopes.map((scope, idx) => {
+                          const granted = activeScopes.includes(scope.key);
+                          return (
+                            <button
+                              key={scope.key}
+                              onClick={() => isEditing && toggleScope(scope.key)}
+                              disabled={!isEditing}
+                              className={`flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors border-b border-border/30 ${
+                                isEditing ? 'hover:bg-secondary/10 cursor-pointer' : 'cursor-default'
+                              } ${granted ? 'bg-primary/5' : ''}`}
+                            >
+                              {granted
+                                ? <CheckSquare className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                : <Square className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                              }
+                              <span className={`font-mono text-xs ${granted ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                {scope.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {/* Pad to even columns */}
+                        {group.scopes.length % 2 !== 0 && <div className="border-b border-border/30" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer action */}
+            {isEditing && (
+              <button
+                onClick={handleSave}
+                disabled={isMutating || (creating && !form.name.trim())}
+                className="w-full flex items-center justify-center gap-2 text-sm font-mono text-primary border border-primary/40 bg-primary/10 py-3 rounded-lg hover:bg-primary/20 transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isMutating ? 'Saving…' : creating ? 'Create Role' : 'Save Changes'}
+              </button>
+            )}
+
+            {/* Metadata for custom roles */}
+            {selected && !selected.builtIn && selected.createdAt && (
+              <div className="text-[10px] font-mono text-muted-foreground/60 space-y-0.5 pt-2 border-t border-border/30">
+                <p>Created: {format(new Date(selected.createdAt), 'yyyy-MM-dd HH:mm')}</p>
+                {selected.updatedAt && selected.updatedAt !== selected.createdAt && (
+                  <p>Updated: {format(new Date(selected.updatedAt), 'yyyy-MM-dd HH:mm')}</p>
+                )}
+              </div>
             )}
           </div>
         )}

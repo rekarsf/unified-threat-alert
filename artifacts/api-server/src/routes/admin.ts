@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import {
-  getAuthData, saveAuthData, createPasswordHash, ROLE_SCOPES, addAuditEntry
+  getAuthData, saveAuthData, createPasswordHash, ROLE_SCOPES, addAuditEntry, type CustomRole
 } from "../lib/auth.js";
 import { requireAuth, requireScope, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
 import { getActiveSessions } from "../lib/sessionStore.js";
@@ -213,9 +213,121 @@ router.get("/sessions", requireScope("admin.users"), (req, res) => {
   res.json({ sessions, total: sessions.length });
 });
 
-// GET /api/admin/roles
+// GET /api/admin/roles — built-in + custom
 router.get("/roles", requireScope("admin.roles"), (req, res) => {
-  res.json({ roles: ROLE_SCOPES });
+  const data = getAuthData();
+  const builtIn = Object.entries(ROLE_SCOPES).map(([name, scopes]) => ({
+    id: `builtin:${name}`,
+    name,
+    description: BUILT_IN_DESCRIPTIONS[name] ?? "",
+    scopes,
+    builtIn: true,
+    createdAt: "",
+    updatedAt: "",
+  }));
+  res.json({ builtIn, custom: data.customRoles });
 });
+
+// POST /api/admin/roles — create custom role
+router.post("/roles", requireScope("admin.roles"), (req: AuthenticatedRequest, res) => {
+  const { name, description, scopes } = req.body as { name?: string; description?: string; scopes?: string[] };
+  if (!name || !scopes) {
+    res.status(400).json({ error: "bad_request", message: "Name and scopes are required" });
+    return;
+  }
+
+  const data = getAuthData();
+  const nameLower = name.toLowerCase().replace(/\s+/g, "-");
+  if (data.customRoles.find(r => r.name.toLowerCase() === name.toLowerCase())) {
+    res.status(409).json({ error: "conflict", message: "A role with that name already exists" });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const role: CustomRole = {
+    id: crypto.randomUUID(),
+    name: nameLower,
+    description: description ?? "",
+    scopes,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.customRoles.push(role);
+  addAuditEntry(data, {
+    userId: req.auth!.id,
+    username: req.auth!.username,
+    action: "create_role",
+    resource: role.name,
+    details: `${scopes.length} scopes`,
+    ip: req.ip,
+  });
+  saveAuthData(data);
+  res.status(201).json(role);
+});
+
+// PUT /api/admin/roles/:roleId — update custom role
+router.put("/roles/:roleId", requireScope("admin.roles"), (req: AuthenticatedRequest, res) => {
+  const { roleId } = req.params;
+  const { name, description, scopes } = req.body as { name?: string; description?: string; scopes?: string[] };
+
+  const data = getAuthData();
+  const role = data.customRoles.find(r => r.id === roleId);
+  if (!role) {
+    res.status(404).json({ error: "not_found", message: "Custom role not found" });
+    return;
+  }
+
+  const changes: string[] = [];
+  if (name && name !== role.name) { changes.push(`name: ${role.name} → ${name}`); role.name = name.toLowerCase().replace(/\s+/g, "-"); }
+  if (description !== undefined) role.description = description;
+  if (scopes) {
+    const added = scopes.filter(s => !role.scopes.includes(s));
+    const removed = role.scopes.filter(s => !scopes.includes(s));
+    if (added.length) changes.push(`+scopes: ${added.join(", ")}`);
+    if (removed.length) changes.push(`-scopes: ${removed.join(", ")}`);
+    role.scopes = scopes;
+  }
+  role.updatedAt = new Date().toISOString();
+
+  addAuditEntry(data, {
+    userId: req.auth!.id,
+    username: req.auth!.username,
+    action: "update_role",
+    resource: role.name,
+    details: changes.join("; ") || "no changes",
+    ip: req.ip,
+  });
+  saveAuthData(data);
+  res.json(role);
+});
+
+// DELETE /api/admin/roles/:roleId — delete custom role
+router.delete("/roles/:roleId", requireScope("admin.roles"), (req: AuthenticatedRequest, res) => {
+  const { roleId } = req.params;
+  const data = getAuthData();
+  const idx = data.customRoles.findIndex(r => r.id === roleId);
+  if (idx === -1) {
+    res.status(404).json({ error: "not_found", message: "Custom role not found" });
+    return;
+  }
+  const [removed] = data.customRoles.splice(idx, 1);
+  addAuditEntry(data, {
+    userId: req.auth!.id,
+    username: req.auth!.username,
+    action: "delete_role",
+    resource: removed.name,
+    ip: req.ip,
+  });
+  saveAuthData(data);
+  res.json({ success: true, message: `Role ${removed.name} deleted` });
+});
+
+const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
+  admin: "Full access to all systems and administration",
+  analyst: "Read and investigate across S1, LR, and Threat Intel",
+  "s1-operator": "Full SentinelOne EDR operations + Threat Intel",
+  "lr-operator": "Full LogRhythm SIEM operations + Threat Intel",
+  readonly: "View-only access across S1 and LR dashboards",
+};
 
 export default router;

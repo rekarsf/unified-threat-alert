@@ -56,8 +56,18 @@ export interface StoredUser {
   createdAt: string;
 }
 
+export interface CustomRole {
+  id: string;
+  name: string;
+  description: string;
+  scopes: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthData {
   users: StoredUser[];
+  customRoles: CustomRole[];
   settings: {
     s1BaseUrl?: string;
     s1ApiToken?: string;
@@ -102,13 +112,20 @@ function loadData(): AuthData {
           createdAt: new Date().toISOString(),
         },
       ],
+      customRoles: [],
       settings: {},
       auditLog: [],
     };
     saveData(data);
     return data;
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+  const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as AuthData;
+  // Migrate existing files that predate the customRoles field
+  if (!data.customRoles) {
+    data.customRoles = [];
+    saveData(data);
+  }
+  return data;
 }
 
 function saveData(data: AuthData): void {

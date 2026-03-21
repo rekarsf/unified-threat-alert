@@ -27,12 +27,49 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-21T17:57:29.694Z",
+      "lastLogin": "2026-03-21T18:12:45.270Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "22810c7a-92ba-4400-b8a2-3fe82cf12753",
+      "timestamp": "2026-03-21T18:14:16.119Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "delete_role",
+      "resource": "test-custom-role",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "7c506a6c-a79b-4441-bc51-dd4984f5929f",
+      "timestamp": "2026-03-21T18:13:55.554Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "update_role",
+      "resource": "test-custom-role",
+      "details": "no changes",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "4b51d5d3-7822-4933-9f1b-97988227704c",
+      "timestamp": "2026-03-21T18:13:40.118Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "create_role",
+      "resource": "test-custom-role",
+      "details": "20 scopes",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "566eb92c-0440-42a8-8117-7fb17489c3e2",
+      "timestamp": "2026-03-21T18:12:45.270Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
     {
       "id": "4feb2176-0c44-4e5b-8223-41cf5d1b4fd4",
       "timestamp": "2026-03-21T18:00:11.916Z",
@@ -213,5 +250,6 @@
       "action": "login",
       "ip": "::ffff:127.0.0.1"
     }
-  ]
+  ],
+  "customRoles": []
 }
