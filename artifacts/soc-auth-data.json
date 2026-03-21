@@ -1,0 +1,53 @@
+{
+  "users": [
+    {
+      "id": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "passwordHash": "dd0ceccd0e5e8dd7dac5f57074d643f1feb890132bd64927ad915eee3a7f3448594db335b4fc71436852b9b0b3e30d9b350331c1ae3ae0640531cd1365167dab",
+      "passwordSalt": "e8ebd711f97784bc6e50f2f1aec73c557a9de7c48dfc12869a6cd00145c7ad6b",
+      "role": "admin",
+      "scopes": [
+        "s1.dashboard",
+        "s1.endpoints.view",
+        "s1.endpoints.manage",
+        "s1.alerts.view",
+        "s1.alerts.manage",
+        "s1.iocs.view",
+        "lr.dashboard",
+        "lr.alarms.view",
+        "lr.alarms.manage",
+        "lr.cases.view",
+        "lr.cases.manage",
+        "lr.logs.view",
+        "lr.logs.search",
+        "lr.admin",
+        "threatintel.view",
+        "threatintel.manage",
+        "admin.users",
+        "admin.roles",
+        "admin.settings"
+      ],
+      "lastLogin": "2026-03-21T16:37:09.692Z",
+      "createdAt": "2026-03-21T16:29:41.969Z"
+    }
+  ],
+  "settings": {},
+  "auditLog": [
+    {
+      "id": "da267c7c-b10d-4218-8e38-0e5f649067cb",
+      "timestamp": "2026-03-21T16:37:09.692Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "6e31ca39-17b3-44b1-9faa-0fd7466e44e0",
+      "timestamp": "2026-03-21T16:29:42.015Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    }
+  ]
+}

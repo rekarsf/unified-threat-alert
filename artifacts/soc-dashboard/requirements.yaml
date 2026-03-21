@@ -1,0 +1,16 @@
+packages:
+  "framer-motion": "For fluid slide-in panels, modal animations, and dashboard layout transitions"
+  "zustand": "Lightweight global state management for auth, notifications, and active UI panels"
+  "recharts": "For rendering LogRhythm analytics charts and S1 endpoint stat visualizations"
+  "date-fns": "For formatting timestamps in alert feeds and audit logs"
+  "topojson-client": "To parse TopoJSON for the Canvas 2D World Map rendering"
+  "@types/topojson-client": "TypeScript definitions for topojson-client"
+  "d3-geo": "For Equirectangular projection calculations on the World Map"
+  "@types/d3-geo": "TypeScript definitions for d3-geo"
+
+images: []
+
+notes:
+  - Global fetch interceptor added in App.tsx to automatically append JWT Bearer tokens to all /api/ requests.
+  - Using unpkg CDN to load countries-110m.json for the World Map to avoid needing local binary files.
+  - Missing API endpoints will fail gracefully; UI will show empty/error states as per requirements.

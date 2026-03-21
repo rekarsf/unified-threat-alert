@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SOC Map Center API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: s1
+    description: SentinelOne EDR
+  - name: lr
+    description: LogRhythm SIEM
+  - name: admin
+    description: Admin operations
+  - name: threatintel
+    description: Threat intelligence
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +32,1250 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: authLogin
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: authMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/change-password:
+    post:
+      operationId: authChangePassword
+      tags: [auth]
+      summary: Change password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /s1/agents:
+    get:
+      operationId: s1GetAgents
+      tags: [s1]
+      summary: Get SentinelOne agents/endpoints
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: query
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agents list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentsResponse"
+
+  /s1/threats:
+    get:
+      operationId: s1GetThreats
+      tags: [s1]
+      summary: Get SentinelOne threats
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: resolved
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Threats list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreatsResponse"
+
+  /s1/alerts:
+    get:
+      operationId: s1GetAlerts
+      tags: [s1]
+      summary: Get SentinelOne cloud detection alerts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Alerts list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsResponse"
+
+  /s1/iocs:
+    get:
+      operationId: s1GetIocs
+      tags: [s1]
+      summary: Get IOCs
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: IOC list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IocResponse"
+
+  /lr/alarms:
+    get:
+      operationId: lrGetAlarms
+      tags: [lr]
+      summary: Get LogRhythm alarms
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Alarms list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrAlarmsResponse"
+
+  /lr/cases:
+    get:
+      operationId: lrGetCases
+      tags: [lr]
+      summary: Get LogRhythm cases
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Cases list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrCasesResponse"
+
+  /lr/logsources:
+    get:
+      operationId: lrGetLogSources
+      tags: [lr]
+      summary: Get LogRhythm log sources
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Log sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrLogSourcesResponse"
+
+  /lr/hosts:
+    get:
+      operationId: lrGetHosts
+      tags: [lr]
+      summary: Get LogRhythm hosts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Hosts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrHostsResponse"
+
+  /lr/networks:
+    get:
+      operationId: lrGetNetworks
+      tags: [lr]
+      summary: Get LogRhythm networks
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Networks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrNetworksResponse"
+
+  /lr/entities:
+    get:
+      operationId: lrGetEntities
+      tags: [lr]
+      summary: Get LogRhythm entities
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Entities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrEntitiesResponse"
+
+  /lr/agents:
+    get:
+      operationId: lrGetAgents
+      tags: [lr]
+      summary: Get LogRhythm agents
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Agents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrAgentsResponse"
+
+  /lr/lists:
+    get:
+      operationId: lrGetLists
+      tags: [lr]
+      summary: Get LogRhythm lists
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LrListsResponse"
+
+  /admin/users:
+    get:
+      operationId: adminGetUsers
+      tags: [admin]
+      summary: Get all users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersListResponse"
+    post:
+      operationId: adminCreateUser
+      tags: [admin]
+      summary: Create user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /admin/users/{userId}:
+    put:
+      operationId: adminUpdateUser
+      tags: [admin]
+      summary: Update user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+    delete:
+      operationId: adminDeleteUser
+      tags: [admin]
+      summary: Delete user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/settings:
+    get:
+      operationId: adminGetSettings
+      tags: [admin]
+      summary: Get API settings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSettings"
+    post:
+      operationId: adminSaveSettings
+      tags: [admin]
+      summary: Save API settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiSettings"
+      responses:
+        "200":
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/audit:
+    get:
+      operationId: adminGetAuditLog
+      tags: [admin]
+      summary: Get audit log
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Audit log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogResponse"
+
+  /threatfox:
+    get:
+      operationId: getThreatFox
+      tags: [threatintel]
+      summary: Get ThreatFox IOCs
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: ThreatFox data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreatFeedResponse"
+
+  /urlhaus:
+    get:
+      operationId: getUrlHaus
+      tags: [threatintel]
+      summary: Get URLhaus data
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: URLhaus data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreatFeedResponse"
+
+  /hackernews:
+    get:
+      operationId: getHackerNews
+      tags: [threatintel]
+      summary: Get security Hacker News posts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+            default: "security vulnerability exploit"
+      responses:
+        "200":
+          description: HN posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HackerNewsResponse"
+
+  /geoip/{ip}:
+    get:
+      operationId: getGeoIp
+      tags: [threatintel]
+      summary: Get GeoIP data for IP
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ip
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: GeoIP data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoIpResponse"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error]
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success]
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required: [token, user]
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        lastLogin:
+          type: string
+          nullable: true
+      required: [id, username, role, scopes]
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required: [currentPassword, newPassword]
+
+    CreateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+      required: [username, password, role]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        role:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        password:
+          type: string
+
+    UsersListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserProfile"
+      required: [users]
+
+    GeoCoords:
+      type: object
+      properties:
+        lat:
+          type: number
+        lng:
+          type: number
+      required: [lat, lng]
+
+    Endpoint:
+      type: object
+      properties:
+        id:
+          type: string
+        hostname:
+          type: string
+        ip:
+          type: string
+        externalIp:
+          type: string
+          nullable: true
+        os:
+          type: string
+        osVersion:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [healthy, warning, threat, offline]
+        agentVersion:
+          type: string
+          nullable: true
+        lastSeen:
+          type: string
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        coords:
+          $ref: "#/components/schemas/GeoCoords"
+          nullable: true
+        threatName:
+          type: string
+          nullable: true
+        threatSeverity:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [s1, lr]
+        groupName:
+          type: string
+          nullable: true
+        domain:
+          type: string
+          nullable: true
+        cpuUsage:
+          type: number
+          nullable: true
+        memUsage:
+          type: number
+          nullable: true
+      required: [id, hostname, ip, os, status, lastSeen, source]
+
+    AgentsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Endpoint"
+        total:
+          type: integer
+      required: [data, total]
+
+    Threat:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        classification:
+          type: string
+          nullable: true
+        agentComputerName:
+          type: string
+          nullable: true
+        agentIp:
+          type: string
+          nullable: true
+        filePath:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        resolved:
+          type: boolean
+        mitigationStatus:
+          type: string
+          nullable: true
+        collectionId:
+          type: string
+          nullable: true
+        endpointId:
+          type: string
+          nullable: true
+      required: [id, name, severity, createdAt, updatedAt, resolved]
+
+    ThreatsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Threat"
+        total:
+          type: integer
+      required: [data, total]
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        source:
+          type: string
+          enum: [s1, lr]
+        timestamp:
+          type: string
+        endpointId:
+          type: string
+          nullable: true
+        endpointName:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, acknowledged, resolved]
+        category:
+          type: string
+          nullable: true
+      required: [id, name, severity, source, timestamp, status]
+
+    AlertsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert"
+        total:
+          type: integer
+      required: [data, total]
+
+    Ioc:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [ip, domain, hash, url, email]
+        value:
+          type: string
+        source:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        expiresAt:
+          type: string
+          nullable: true
+        hits:
+          type: integer
+          nullable: true
+      required: [id, type, value, source, severity, createdAt]
+
+    IocResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ioc"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrAlarm:
+      type: object
+      properties:
+        alarmId:
+          type: integer
+        alarmName:
+          type: string
+        alarmStatus:
+          type: string
+        severity:
+          type: integer
+        alarmDate:
+          type: string
+        entityName:
+          type: string
+          nullable: true
+        alarmRuleOwner:
+          type: string
+          nullable: true
+        associatedCases:
+          type: array
+          items:
+            type: string
+      required: [alarmId, alarmName, alarmStatus, severity, alarmDate]
+
+    LrAlarmsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrAlarm"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrCase:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: object
+          properties:
+            name:
+              type: string
+          required: [name]
+        priority:
+          type: integer
+        owner:
+          type: object
+          properties:
+            name:
+              type: string
+          nullable: true
+        dueDate:
+          type: string
+          nullable: true
+        dateCreated:
+          type: string
+        collaborators:
+          type: array
+          items:
+            type: object
+        alarmsCount:
+          type: integer
+      required: [id, name, status, priority, dateCreated]
+
+    LrCasesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrCase"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrLogSource:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        host:
+          type: object
+          nullable: true
+        status:
+          type: string
+        logSourceType:
+          type: object
+          nullable: true
+        lastIngested:
+          type: string
+          nullable: true
+        recordCount:
+          type: integer
+          nullable: true
+      required: [id, name, status]
+
+    LrLogSourcesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrLogSource"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrHost:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+        hostZone:
+          type: string
+          nullable: true
+        os:
+          type: object
+          nullable: true
+        riskLevel:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+      required: [id, name, status]
+
+    LrHostsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrHost"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrNetwork:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bip:
+          type: string
+          nullable: true
+        eip:
+          type: string
+          nullable: true
+        entityName:
+          type: string
+          nullable: true
+        hostCount:
+          type: integer
+          nullable: true
+      required: [id, name]
+
+    LrNetworksResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrNetwork"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrEntity:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        fullName:
+          type: string
+          nullable: true
+        parentEntityId:
+          type: integer
+          nullable: true
+        safeListAllowed:
+          type: boolean
+          nullable: true
+      required: [id, name]
+
+    LrEntitiesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrEntity"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrAgent:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        version:
+          type: string
+          nullable: true
+        host:
+          type: string
+          nullable: true
+      required: [id, name, status]
+
+    LrAgentsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrAgent"
+        total:
+          type: integer
+      required: [data, total]
+
+    LrList:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        listType:
+          type: object
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        entryCount:
+          type: integer
+          nullable: true
+      required: [id, name]
+
+    LrListsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LrList"
+        total:
+          type: integer
+      required: [data, total]
+
+    ApiSettings:
+      type: object
+      properties:
+        s1BaseUrl:
+          type: string
+          nullable: true
+        s1ApiToken:
+          type: string
+          nullable: true
+        lrBaseUrl:
+          type: string
+          nullable: true
+        lrApiToken:
+          type: string
+          nullable: true
+      required: []
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+        userId:
+          type: string
+        username:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+          nullable: true
+        details:
+          type: string
+          nullable: true
+        ip:
+          type: string
+          nullable: true
+      required: [id, timestamp, userId, username, action]
+
+    AuditLogResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        total:
+          type: integer
+      required: [data, total]
+
+    ThreatFeedItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        value:
+          type: string
+        malware:
+          type: string
+          nullable: true
+        confidence:
+          type: integer
+          nullable: true
+        firstSeen:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+      required: [id, type, value]
+
+    ThreatFeedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreatFeedItem"
+        source:
+          type: string
+        total:
+          type: integer
+      required: [data, source, total]
+
+    HackerNewsItem:
+      type: object
+      properties:
+        objectID:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+          nullable: true
+        author:
+          type: string
+        points:
+          type: integer
+        num_comments:
+          type: integer
+        created_at:
+          type: string
+        story_text:
+          type: string
+          nullable: true
+      required: [objectID, title, author, points, num_comments, created_at]
+
+    HackerNewsResponse:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/HackerNewsItem"
+        total:
+          type: integer
+      required: [hits, total]
+
+    GeoIpResponse:
+      type: object
+      properties:
+        ip:
+          type: string
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
+        isp:
+          type: string
+          nullable: true
+      required: [ip]
