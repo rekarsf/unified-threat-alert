@@ -40,43 +40,25 @@ interface IntegrationGroup {
 
 const INTEGRATION_GROUPS: IntegrationGroup[] = [
   {
-    title: 'Core EDR / SIEM',
+    title: 'EDR — Endpoint Detection & Response',
     icon: <Shield className="w-4 h-4" />,
     integrations: [
       {
         id: 'sentinelone',
-        name: 'SentinelOne EDR',
-        description: 'Endpoint detection, response and threat hunting platform.',
+        name: 'SentinelOne',
+        description: 'AI-powered endpoint detection, response and threat hunting.',
         icon: <Shield className="w-5 h-5" />,
         color: 'text-primary',
         fields: [
           { key: 's1BaseUrl', label: 'Console URL', placeholder: 'https://your-tenant.sentinelone.net', type: 'url' },
           { key: 's1ApiToken', label: 'API Token', placeholder: 'ApiToken xxxxxxxxxxxxxxxx', type: 'password' },
         ],
-        docsUrl: 'https://usea1.sentinelone.net/api-doc/',
+        docsUrl: 'https://usea1.sentinelone.net/api-doc/overview',
       },
-      {
-        id: 'logrhythm',
-        name: 'LogRhythm SIEM',
-        description: 'Security information and event management platform.',
-        icon: <Database className="w-5 h-5" />,
-        color: 'text-blue-400',
-        fields: [
-          { key: 'lrBaseUrl', label: 'API Base URL', placeholder: 'https://lr-server/lr-api/v1', type: 'url' },
-          { key: 'lrApiToken', label: 'Bearer Token', placeholder: 'Bearer eyJhbGci...', type: 'password' },
-        ],
-        docsUrl: 'https://docs.logrhythm.com/lrsiem/',
-      },
-    ],
-  },
-  {
-    title: 'Extended EDR / XDR',
-    icon: <Cpu className="w-4 h-4" />,
-    integrations: [
       {
         id: 'crowdstrike',
         name: 'CrowdStrike Falcon',
-        description: 'Cloud-delivered endpoint protection and threat intelligence.',
+        description: 'Cloud-native endpoint protection and threat intelligence.',
         icon: <Shield className="w-5 h-5" />,
         color: 'text-red-400',
         fields: [
@@ -84,12 +66,44 @@ const INTEGRATION_GROUPS: IntegrationGroup[] = [
           { key: 'csClientId', label: 'Client ID', placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' },
           { key: 'csClientSecret', label: 'Client Secret', placeholder: 'Client secret value', type: 'password' },
         ],
-        docsUrl: 'https://falcon.crowdstrike.com/documentation/46/crowdstrike-oauth2-based-apis',
+        docsUrl: 'https://falcon.crowdstrike.com/documentation/page/a2a7fc0e/crowdstrike-oauth2-based-apis',
+      },
+      {
+        id: 'msdefender',
+        name: 'Microsoft Defender',
+        description: 'Enterprise endpoint security integrated with Microsoft 365.',
+        icon: <Shield className="w-5 h-5" />,
+        color: 'text-blue-400',
+        fields: [
+          { key: 'mdefTenantId', label: 'Tenant ID', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+          { key: 'mdefClientId', label: 'App (Client) ID', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+          { key: 'mdefClientSecret', label: 'Client Secret', placeholder: 'Azure app registration secret', type: 'password' },
+        ],
+        docsUrl: 'https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/apis-intro',
+      },
+    ],
+  },
+  {
+    title: 'XDR — Extended Detection & Response',
+    icon: <Zap className="w-4 h-4" />,
+    integrations: [
+      {
+        id: 'cortexXdr',
+        name: 'Palo Alto Cortex XDR',
+        description: 'Extended detection and response across endpoints, network, and cloud.',
+        icon: <Zap className="w-5 h-5" />,
+        color: 'text-primary',
+        fields: [
+          { key: 'xdrBaseUrl', label: 'API Base URL', placeholder: 'https://api-your-tenant.xdr.us.paloaltonetworks.com', type: 'url' },
+          { key: 'xdrApiKeyId', label: 'API Key ID', placeholder: 'Numeric key ID' },
+          { key: 'xdrApiKey', label: 'API Key', placeholder: 'Cortex XDR API key', type: 'password' },
+        ],
+        docsUrl: 'https://docs-cortex.paloaltonetworks.com/r/Cortex-XDR/Cortex-XDR-API-Reference',
       },
       {
         id: 'sentinel',
         name: 'Microsoft Sentinel',
-        description: 'Cloud-native SIEM and SOAR from Microsoft Azure.',
+        description: 'Cloud-native SIEM and XDR from Microsoft Azure.',
         icon: <Globe className="w-5 h-5" />,
         color: 'text-blue-400',
         fields: [
@@ -97,10 +111,107 @@ const INTEGRATION_GROUPS: IntegrationGroup[] = [
           { key: 'msClientId', label: 'Client ID (App ID)', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
           { key: 'msClientSecret', label: 'Client Secret', placeholder: 'App registration secret', type: 'password' },
           { key: 'msWorkspaceId', label: 'Workspace ID', placeholder: 'Log Analytics workspace ID' },
-          { key: 'msResourceGroup', label: 'Resource Group', placeholder: 'my-sentinel-rg' },
           { key: 'msSubscriptionId', label: 'Subscription ID', placeholder: 'Azure subscription UUID' },
         ],
-        docsUrl: 'https://learn.microsoft.com/azure/sentinel/',
+        docsUrl: 'https://learn.microsoft.com/en-us/rest/api/securityinsights/',
+      },
+      {
+        id: 'trendVisionOne',
+        name: 'Trend Micro Vision One',
+        description: 'XDR platform with threat intelligence and risk management.',
+        icon: <Activity className="w-5 h-5" />,
+        color: 'text-red-400',
+        fields: [
+          { key: 'tmBaseUrl', label: 'Regional API URL', placeholder: 'https://api.xdr.trendmicro.com', type: 'url' },
+          { key: 'tmApiKey', label: 'API Key', placeholder: 'Vision One API key', type: 'password' },
+        ],
+        docsUrl: 'https://automation.trendmicro.com/xdr/api-v3',
+      },
+    ],
+  },
+  {
+    title: 'SIEM — Security Information & Event Management',
+    icon: <Database className="w-4 h-4" />,
+    integrations: [
+      {
+        id: 'logrhythm',
+        name: 'LogRhythm SIEM',
+        description: 'Next-gen SIEM with AI-driven analytics and threat lifecycle management.',
+        icon: <Database className="w-5 h-5" />,
+        color: 'text-primary',
+        fields: [
+          { key: 'lrBaseUrl', label: 'API Base URL', placeholder: 'https://lr-server/lr-api/v1', type: 'url' },
+          { key: 'lrApiToken', label: 'Bearer Token', placeholder: 'Bearer eyJhbGci...', type: 'password' },
+        ],
+        docsUrl: 'https://docs.logrhythm.com/docs/rest-api-development',
+      },
+      {
+        id: 'splunk',
+        name: 'Splunk Enterprise',
+        description: 'Data platform for security operations and threat detection.',
+        icon: <Database className="w-5 h-5" />,
+        color: 'text-orange-400',
+        fields: [
+          { key: 'splunkBaseUrl', label: 'Splunk URL', placeholder: 'https://splunk.internal:8089', type: 'url' },
+          { key: 'splunkToken', label: 'HEC / API Token', placeholder: 'Splunk auth token', type: 'password' },
+          { key: 'splunkIndex', label: 'Default Index', placeholder: 'main' },
+        ],
+        docsUrl: 'https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTprolog',
+      },
+      {
+        id: 'qradar',
+        name: 'IBM QRadar',
+        description: 'Enterprise SIEM with behavioral analytics and threat correlation.',
+        icon: <Database className="w-5 h-5" />,
+        color: 'text-blue-400',
+        fields: [
+          { key: 'qrBaseUrl', label: 'Console URL', placeholder: 'https://qradar.internal', type: 'url' },
+          { key: 'qrApiToken', label: 'SEC Token', placeholder: 'QRadar API token', type: 'password' },
+        ],
+        docsUrl: 'https://www.ibm.com/docs/en/SS42VS_SHR/com.ibm.qradar.doc/c_rest_api_getting_started.html',
+      },
+    ],
+  },
+  {
+    title: 'SOAR — Security Orchestration, Automation & Response',
+    icon: <Cpu className="w-4 h-4" />,
+    integrations: [
+      {
+        id: 'xsoar',
+        name: 'Palo Alto XSOAR',
+        description: 'Security orchestration, automation and incident response platform.',
+        icon: <Zap className="w-5 h-5" />,
+        color: 'text-primary',
+        fields: [
+          { key: 'xsoarBaseUrl', label: 'XSOAR URL', placeholder: 'https://xsoar.internal/xsoar', type: 'url' },
+          { key: 'xsoarApiKey', label: 'API Key', placeholder: 'XSOAR API key', type: 'password' },
+        ],
+        docsUrl: 'https://xsoar.pan.dev/docs/reference/api/demisto-class',
+      },
+      {
+        id: 'splunksoar',
+        name: 'Splunk SOAR',
+        description: 'Automate security operations and enrich alerts with Splunk SOAR.',
+        icon: <Zap className="w-5 h-5" />,
+        color: 'text-orange-400',
+        fields: [
+          { key: 'splunksoarBaseUrl', label: 'Splunk SOAR URL', placeholder: 'https://splunk-soar.internal', type: 'url' },
+          { key: 'splunksoarToken', label: 'API Token', placeholder: 'Splunk SOAR auth token', type: 'password' },
+        ],
+        docsUrl: 'https://docs.splunk.com/Documentation/SOAR/current/DevelopApps/ApiQuickStart',
+      },
+      {
+        id: 'ibmsoar',
+        name: 'IBM SOAR',
+        description: 'Incident response automation and orchestration by IBM.',
+        icon: <Zap className="w-5 h-5" />,
+        color: 'text-blue-400',
+        fields: [
+          { key: 'ibmsoarBaseUrl', label: 'SOAR URL', placeholder: 'https://ibm-soar.internal', type: 'url' },
+          { key: 'ibmsoarApiKey', label: 'API Key ID', placeholder: 'IBM SOAR API key ID' },
+          { key: 'ibmsoarApiSecret', label: 'API Key Secret', placeholder: 'IBM SOAR API secret', type: 'password' },
+        ],
+        docsUrl: 'https://developer.ibm.com/apis/catalog/?search=resilient',
       },
     ],
   },
@@ -308,36 +419,6 @@ const INTEGRATION_GROUPS: IntegrationGroup[] = [
           { key: 'qualysPassword', label: 'Password', placeholder: 'Qualys password', type: 'password' },
         ],
         docsUrl: 'https://www.qualys.com/docs/qualys-api-vmpc-user-guide.pdf',
-      },
-    ],
-  },
-  {
-    title: 'SOAR / Orchestration',
-    icon: <Zap className="w-4 h-4" />,
-    integrations: [
-      {
-        id: 'xsoar',
-        name: 'Cortex XSOAR',
-        description: 'Security orchestration, automation and response platform.',
-        icon: <Zap className="w-5 h-5" />,
-        color: 'text-primary',
-        fields: [
-          { key: 'xsoarBaseUrl', label: 'XSOAR URL', placeholder: 'https://xsoar.internal/xsoar', type: 'url' },
-          { key: 'xsoarApiKey', label: 'API Key', placeholder: 'XSOAR API key', type: 'password' },
-        ],
-        docsUrl: 'https://xsoar.pan.dev/docs/reference/api/demisto-class',
-      },
-      {
-        id: 'splunksoar',
-        name: 'Splunk SOAR',
-        description: 'Automate security workflows and enrich alerts via Splunk.',
-        icon: <Zap className="w-5 h-5" />,
-        color: 'text-orange-400',
-        fields: [
-          { key: 'splunkBaseUrl', label: 'Splunk SOAR URL', placeholder: 'https://splunk-soar.internal', type: 'url' },
-          { key: 'splunkApiToken', label: 'API Token', placeholder: 'Splunk auth token', type: 'password' },
-        ],
-        docsUrl: 'https://docs.splunk.com/Documentation/SOARon',
       },
     ],
   },
