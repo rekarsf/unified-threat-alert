@@ -72,3 +72,77 @@ export const useAppStore = create<AppState>((set) => ({
   selectedEndpoint: null,
   setSelectedEndpoint: (endpoint) => set({ selectedEndpoint: endpoint }),
 }));
+
+// ─── Settings Store ────────────────────────────────────────────────────────────
+
+export const ACCENT_HSL: Record<string, { h: number; s: number; l: number }> = {
+  teal:    { h: 172, s: 76, l: 48 },
+  blue:    { h: 213, s: 94, l: 62 },
+  violet:  { h: 262, s: 80, l: 65 },
+  emerald: { h: 152, s: 80, l: 44 },
+  amber:   { h:  38, s: 92, l: 54 },
+};
+
+export interface SettingsValues {
+  refreshInterval: number;
+  accentColor: string;
+  uiDensity: 'comfortable' | 'compact';
+  tickerSpeed: number;
+  dataRetention: number;
+}
+
+interface SettingsState extends SettingsValues {
+  load: () => void;
+  save: (patch: Partial<SettingsValues>) => void;
+}
+
+function readInt(key: string, fallback: number): number {
+  const v = localStorage.getItem(key);
+  return v !== null && !isNaN(parseInt(v, 10)) ? parseInt(v, 10) : fallback;
+}
+
+function applyAccentToDOM(accentColor: string) {
+  const hsl = ACCENT_HSL[accentColor] ?? ACCENT_HSL.teal;
+  const root = document.documentElement;
+  root.style.setProperty('--primary', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
+  root.style.setProperty('--accent', `${hsl.h} ${Math.round(hsl.s * 0.65)}% ${Math.round(hsl.l * 0.42)}%`);
+}
+
+function applyDensityToDOM(density: 'comfortable' | 'compact') {
+  document.documentElement.setAttribute('data-density', density);
+}
+
+function readAllSettings(): SettingsValues {
+  return {
+    refreshInterval: readInt('soc_refresh_interval', 30),
+    accentColor: localStorage.getItem('soc_accent_color') ?? 'teal',
+    uiDensity: (localStorage.getItem('soc_ui_density') as 'comfortable' | 'compact') ?? 'comfortable',
+    tickerSpeed: readInt('soc_ticker_speed', 4500),
+    dataRetention: readInt('soc_data_retention', 30),
+  };
+}
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
+  ...readAllSettings(),
+
+  load: () => {
+    const values = readAllSettings();
+    set(values);
+    applyAccentToDOM(values.accentColor);
+    applyDensityToDOM(values.uiDensity);
+  },
+
+  save: (patch) => {
+    const next: SettingsValues = { ...get(), ...patch };
+    set(patch);
+
+    if (patch.refreshInterval !== undefined) localStorage.setItem('soc_refresh_interval', String(patch.refreshInterval));
+    if (patch.accentColor !== undefined) localStorage.setItem('soc_accent_color', patch.accentColor);
+    if (patch.uiDensity !== undefined) localStorage.setItem('soc_ui_density', patch.uiDensity);
+    if (patch.tickerSpeed !== undefined) localStorage.setItem('soc_ticker_speed', String(patch.tickerSpeed));
+    if (patch.dataRetention !== undefined) localStorage.setItem('soc_data_retention', String(patch.dataRetention));
+
+    if (patch.accentColor !== undefined) applyAccentToDOM(next.accentColor);
+    if (patch.uiDensity !== undefined) applyDensityToDOM(next.uiDensity);
+  },
+}));

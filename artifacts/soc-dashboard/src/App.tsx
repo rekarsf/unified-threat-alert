@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import { useAuthStore } from "./lib/store";
+import { useAuthStore, useSettingsStore } from "./lib/store";
 import { AppLayout } from "./components/layout";
 
 // Pages
@@ -58,6 +58,28 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   
   return response;
 };
+
+// Applies all persisted settings to the DOM and QueryClient on boot and whenever they change.
+function SettingsApplier() {
+  const { load, refreshInterval } = useSettingsStore();
+
+  // Boot: apply accent + density from localStorage on first render
+  useEffect(() => { load(); }, []);
+
+  // Drive refetchInterval globally whenever the setting changes
+  useEffect(() => {
+    queryClient.setDefaultOptions({
+      queries: {
+        retry: 1,
+        refetchOnWindowFocus: false,
+        staleTime: 30_000,
+        refetchInterval: refreshInterval === 0 ? false : refreshInterval * 1_000,
+      },
+    });
+  }, [refreshInterval]);
+
+  return null;
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated } = useAuthStore();
@@ -145,6 +167,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <SettingsApplier />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Router />
         </WouterRouter>

@@ -130,11 +130,11 @@
 
 @layer utilities {
   .cyber-glow {
-    box-shadow: 0 0 0 1px hsla(172, 76%, 48%, 0.25), 0 0 16px hsla(172, 76%, 48%, 0.12);
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.25), 0 0 16px hsl(var(--primary) / 0.12);
   }
 
   .cyber-glow-hover:hover {
-    box-shadow: 0 0 0 1px hsla(172, 76%, 48%, 0.5), 0 0 20px hsla(172, 76%, 48%, 0.2);
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.5), 0 0 20px hsl(var(--primary) / 0.2);
   }
 
   .cyber-glow-destructive {
@@ -146,7 +146,7 @@
   }
 
   .text-shadow-cyber {
-    text-shadow: 0 0 20px hsla(172, 76%, 48%, 0.4);
+    text-shadow: 0 0 20px hsl(var(--primary) / 0.4);
   }
 
   .glass {
@@ -170,16 +170,41 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsla(172, 76%, 48%, 0.25);
+    background: hsl(var(--primary) / 0.25);
     border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsla(172, 76%, 48%, 0.5);
+    background: hsl(var(--primary) / 0.5);
   }
 
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: hsla(172, 76%, 48%, 0.25) transparent;
+    scrollbar-color: hsl(var(--primary) / 0.25) transparent;
+  }
+
+  /* ── UI Density: compact mode ─────────────────────────── */
+  [data-density="compact"] table td,
+  [data-density="compact"] table th {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+
+  [data-density="compact"] .stat-card {
+    padding: 0.875rem !important;
+  }
+
+  [data-density="compact"] .card-body {
+    padding: 0.75rem 1rem !important;
+  }
+
+  [data-density="compact"] .nav-item-py {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+
+  [data-density="compact"] .border-b.border-border:not(header):not(nav) {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
   }
 }
 
@@ -189,8 +214,8 @@
 }
 
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px hsla(172, 76%, 48%, 0.2); }
-  50% { box-shadow: 0 0 20px hsla(172, 76%, 48%, 0.45); }
+  0%, 100% { box-shadow: 0 0 8px hsl(var(--primary) / 0.2); }
+  50% { box-shadow: 0 0 20px hsl(var(--primary) / 0.45); }
 }
 
 @keyframes marquee {

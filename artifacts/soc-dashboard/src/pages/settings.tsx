@@ -9,6 +9,7 @@ import {
   Server, Search, AlertTriangle, Cpu
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useSettingsStore } from '@/lib/store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -387,19 +388,23 @@ const TICKER_OPTIONS = [
 
 function CenterSettingsTab() {
   const { toast } = useToast();
-  const [refresh, setRefresh] = useState(() => localStorage.getItem('soc_refresh_interval') ?? '30');
-  const [accent, setAccent] = useState(() => localStorage.getItem('soc_accent_color') ?? 'teal');
-  const [density, setDensity] = useState(() => localStorage.getItem('soc_ui_density') ?? 'comfortable');
-  const [retention, setRetention] = useState(() => localStorage.getItem('soc_data_retention') ?? '30');
-  const [ticker, setTicker] = useState(() => localStorage.getItem('soc_ticker_speed') ?? '4500');
+  const { refreshInterval, accentColor, uiDensity, tickerSpeed, dataRetention, save } = useSettingsStore();
+
+  const refresh = String(refreshInterval);
+  const accent = accentColor;
+  const density = uiDensity;
+  const ticker = String(tickerSpeed);
+  const retention = String(dataRetention);
+
+  // Each setter applies changes immediately through the store
+  const setRefresh = (v: string) => save({ refreshInterval: parseInt(v, 10) });
+  const setAccent = (v: string) => save({ accentColor: v });
+  const setDensity = (v: 'comfortable' | 'compact') => save({ uiDensity: v });
+  const setTicker = (v: string) => save({ tickerSpeed: parseInt(v, 10) });
+  const setRetention = (v: string) => save({ dataRetention: parseInt(v, 10) });
 
   const handleSave = () => {
-    localStorage.setItem('soc_refresh_interval', refresh);
-    localStorage.setItem('soc_accent_color', accent);
-    localStorage.setItem('soc_ui_density', density);
-    localStorage.setItem('soc_data_retention', retention);
-    localStorage.setItem('soc_ticker_speed', ticker);
-    toast({ title: 'Center settings saved', description: 'Preferences stored locally in your browser.' });
+    toast({ title: 'Preferences saved', description: 'All settings are active and stored for future sessions.' });
   };
 
   return (

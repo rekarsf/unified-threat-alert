@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useS1GetAgents, useS1GetThreats, useS1GetAlerts } from '@workspace/api-client-react';
+import { useSettingsStore } from '@/lib/store';
 import { WorldMap } from '@/components/world-map';
 import { CyberBadge } from '@/components/cyber-ui';
 import {
@@ -293,12 +294,13 @@ function AlertCard({ alert }: { alert: any }) {
 
 function LiveTicker({ alerts }: { alerts: any[] }) {
   const [idx, setIdx] = useState(0);
+  const tickerSpeed = useSettingsStore(s => s.tickerSpeed);
 
   useEffect(() => {
     if (alerts.length <= 1) return;
-    const t = setInterval(() => setIdx(i => (i + 1) % alerts.length), 4500);
+    const t = setInterval(() => setIdx(i => (i + 1) % alerts.length), tickerSpeed);
     return () => clearInterval(t);
-  }, [alerts.length]);
+  }, [alerts.length, tickerSpeed]);
 
   if (alerts.length === 0) return null;
 
