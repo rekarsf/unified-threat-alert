@@ -82,6 +82,29 @@ function SettingsApplier() {
   return null;
 }
 
+// Re-hydrates the auth store with fresh user data (including current scopes) on every
+// page load when a stored JWT token exists. Without this, hasScope() returns false
+// for all tabs on page reload because user is null until setAuth is explicitly called.
+function SessionBootstrap() {
+  const { token, setAuth, clearAuth } = useAuthStore();
+
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/auth/me')
+      .then(r => {
+        if (!r.ok) { clearAuth(); return; }
+        return r.json();
+      })
+      .then((profile) => {
+        if (profile) setAuth(profile, token);
+      })
+      .catch(() => {/* network error — leave existing state */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated } = useAuthStore();
   const [, setLocation] = useLocation();
@@ -169,6 +192,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <SettingsApplier />
+        <SessionBootstrap />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Router />
         </WouterRouter>
