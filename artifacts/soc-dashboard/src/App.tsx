@@ -16,6 +16,7 @@ import { ActiveAlertsPage, CriticalAlertsPage, AlertHistoryPage } from "./pages/
 import IocPage from "./pages/iocs";
 import { LrAlarmsPage, LrCasesPage, LrSourcesPage, LrSearchPage, LrListsPage, LrEntitiesPage, LrHostsPage, LrNetworksPage, LrAgentsPage } from "./pages/lr-pages";
 import HackerNewsPage from "./pages/hackernews";
+import ThreatIntelPage from "./pages/threatintel";
 import AdminPage from "./pages/admin";
 import SettingsPage from "./pages/settings";
 import MapFullscreenPage from "./pages/map-fullscreen";
@@ -175,6 +176,7 @@ function Router() {
       
       {/* Threat Intelligence */}
       <Route path="/feeds/hackernews"><ProtectedRoute component={HackerNewsPage} /></Route>
+      <Route path="/threatintel"><ProtectedRoute component={ThreatIntelPage} /></Route>
       
       {/* Admin */}
       <Route path="/admin"><ProtectedRoute component={AdminPage} /></Route>

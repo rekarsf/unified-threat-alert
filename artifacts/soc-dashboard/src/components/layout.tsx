@@ -4,7 +4,8 @@ import {
   Shield, Activity, Database, AlertTriangle, Crosshair, Server, Users, Settings,
   LogOut, Menu, Bell, Monitor, Laptop, Network,
   Building, List, Search, FileText, Rss, Briefcase, Hash,
-  ChevronDown, Globe, PanelLeftClose, PanelLeftOpen, Zap
+  ChevronDown, Globe, PanelLeftClose, PanelLeftOpen, Zap,
+  Bug, Link2, Package, Eye, MessageCircle, FileCode
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore, useAppStore } from '@/lib/store';
@@ -233,7 +234,17 @@ export function Sidebar() {
       title: "Threat Intel",
       icon: <Hash className="w-3.5 h-3.5" />,
       items: [
-        { label: "HackerNews Feed", path: "/feeds/hackernews", icon: <Rss className="w-4 h-4" /> },
+        { label: "Overview", path: "/threatintel", icon: <Activity className="w-4 h-4" /> },
+        { label: "Hacker News", path: "/feeds/hackernews", icon: <Rss className="w-4 h-4" /> },
+        { label: "CISA KEV", path: "/threatintel#cisa-kev", icon: <Shield className="w-4 h-4" /> },
+        { label: "NVD CVEs", path: "/threatintel#nvd", icon: <Database className="w-4 h-4" /> },
+        { label: "ThreatFox", path: "/threatintel#threatfox", icon: <Bug className="w-4 h-4" /> },
+        { label: "URLHaus", path: "/threatintel#urlhaus", icon: <Link2 className="w-4 h-4" /> },
+        { label: "Malware Bazaar", path: "/threatintel#malwarebazaar", icon: <Package className="w-4 h-4" /> },
+        { label: "CIRCL", path: "/threatintel#circl", icon: <FileCode className="w-4 h-4" /> },
+        { label: "VirusTotal", path: "/threatintel#virustotal", icon: <Eye className="w-4 h-4" /> },
+        { label: "AbuseIPDB", path: "/threatintel#abuseipdb", icon: <Hash className="w-4 h-4" /> },
+        { label: "Reddit", path: "/threatintel#reddit", icon: <MessageCircle className="w-4 h-4" /> },
       ]
     },
     {
