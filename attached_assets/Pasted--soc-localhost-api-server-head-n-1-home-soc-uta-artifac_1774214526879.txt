@@ -1,0 +1,59 @@
+[soc@localhost api-server]$ head -n -1 /home/soc/uta/artifacts/api-server/src/routes/threatintel.ts > /tmp/ti_tmp.ts
+cat >> /tmp/ti_tmp.ts << 'EOF'
+// ─── Feodo Tracker ──────────────────────────────────────────────────────────
+router.get("/feodo", async (_req, res) => {
+  const resp = await safeFetch("https://feodotracker.abuse.ch/downloads/ipblocklist.json", {}, 12000);
+  if (resp?.ok) {
+    const raw = await resp.json() as any;
+    const list: any[] = Array.isArray(raw) ? raw : (raw.blocklist ?? []);
+    const items = list.slice(0, 150).map((e: any) => ({
+      id: `${e.ip_address}:${e.port}`,
+      ip: e.ip_address,
+      port: e.port,
+      status: e.status,
+      hostname: e.hostname,
+      abuseScore: e.abuse_ch_score ?? null,
+      country: e.country,
+      firstSeen: e.first_seen,
+      lastSeen: e.last_online ?? e.last_seen,
+      malware: e.malware,
+      asnName: e.as_name,
+    }));
+    res.json({ data: items, source: "feodo", total: list.length });
+    return;
+  }
+  res.json({ data: [], source: "feodo", total: 0, mock: true });
+});
+// ─── GitHub Security Advisories ─────────────────────────────────────────────
+router.get("/ghsa", async (req, res) => {
+  const severity = (req.query.severity as string) || "";
+EOFort default router; source: "epss", total: 0, mock: true }); items.length, date: raw.date });r-Agent": "UnifiedThreatAler
+[soc@localhost api-server]$
+[soc@localhost api-server]$ mv /tmp/ti_tmp.ts /home/soc/uta/artifacts/api-server/src/routes/threatintel.ts
+[soc@localhost api-server]$ cd /home/soc/uta/artifacts/api-server
+node ./build.mjs && sudo systemctl restart uta-api.service && sleep 3
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 538ms
+[soc@localhost api-server]$ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+for feed in feodo ghsa epss; do
+  echo -n "=== $feed === "
+  curl -s "http://localhost:8080/api/threatintel/$feed" \
+    -H "Authorization: Bearer $TOKEN" | grep -o '"total":[0-9]*'
+done
+=== feodo === "total":5
+=== ghsa === "total":30
+=== epss === "total":0
+[soc@localhost api-server]$
