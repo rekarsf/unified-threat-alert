@@ -1,0 +1,68 @@
+[soc@localhost api-server]$ TOKEN=$(curl -s -X POST http://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+echo "=== GHSA ===" && curl -s "http://localhost/api/threatintel/ghsa" \
+  -H "Authorization: Bearer $TOKEN" | grep -o '"total":[0-9]*'
+
+echo "=== EPSS ===" && curl -s "http://localhost/api/threatintel/epss" \
+  -H "Authorization: Bearer $TOKEN" | grep -o '"total":[0-9]*'
+
+echo "=== FEODO ===" && curl -s "http://localhost/api/threatintel/feodo" \
+  -H "Authorization: Bearer $TOKEN" | grep -o '"total":[0-9]*'
+=== GHSA ===
+=== EPSS ===
+=== FEODO ===
+[soc@localhost api-server]$ cat > /home/soc/uta/artifacts/api-server/src/routes/hn.ts << 'EOF'
+import { Router } from "express";
+
+const router = Router();
+
+router.get("/hackernews", async (req, res) => {
+  const query = encodeURIComponent((req.query.query as string) || "security vulnerability exploit");
+  try {
+    const url = `https://hn.algolia.com/api/v1/search?query=${query}&tags=story&hitsPerPage=30`;
+    const upstream = await fetch(url, {
+      headers: { "User-Agent": "UnifiedThreatAlert/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!upstream.ok) {
+      res.status(502).json({ error: "upstream_error" });
+      return;
+    }
+    const data = await upstream.json() as { hits: unknown[] };
+    res.json({ hits: data.hits ?? [] });
+  } catch (err: any) {
+    res.status(502).json({ error: "fetch_failed", message: err?.message });
+  }
+});
+
+export default router;
+EOF
+
+node ./build.mjs && sudo systemctl restart uta-api.service
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 466ms
+[soc@localhost api-server]$ TOKEN=$(curl -s -X POST http://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+for feed in ghsa epss feodo; do
+  echo -n "=== $feed === " && curl -s "http://localhost/api/threatintel/$feed" \
+    -H "Authorization: Bearer $TOKEN" | grep -o '"total":[0-9]*'
+done
+=== ghsa === === epss === === feodo === [soc@localhost api-server]$
+[soc@localhost api-server]$
+[soc@localhost api-server]$
+[soc@localhost api-server]$
