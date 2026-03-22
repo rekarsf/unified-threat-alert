@@ -1,0 +1,26 @@
+[soc@localhost uta]$ ls /etc/httpd/conf.d/
+autoindex.conf  README  s1-proxy.conf.disabled  userdir.conf  uta.conf  welcome.conf.bak  your-site.conf.disabled
+[soc@localhost uta]$ sudo apachectl -S 2>&1 | head -40
+apachectl: The "-S" option is not supported.
+[soc@localhost uta]$ sudo tail -20 /var/log/httpd/error_log
+[Sun Mar 22 16:45:09.953912 2026] [mpm_event:notice] [pid 2957351:tid 2957351] AH00493: SIGUSR1 received.  Doing graceful restart
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using localhost.localdomain. Set the 'ServerName' directive globally to suppress this message
+[Sun Mar 22 16:45:10.017308 2026] [lbmethod_heartbeat:notice] [pid 2957351:tid 2957351] AH02282: No slotmem from mod_heartmonitor
+[Sun Mar 22 16:45:10.022427 2026] [mpm_event:notice] [pid 2957351:tid 2957351] AH00489: Apache/2.4.62 (Rocky Linux) configured -- resuming normal operations
+[Sun Mar 22 16:45:10.022452 2026] [core:notice] [pid 2957351:tid 2957351] AH00094: Command line: '/usr/sbin/httpd -D FOREGROUND'
+[Sun Mar 22 16:45:21.482358 2026] [mpm_event:notice] [pid 2957351:tid 2957351] AH00493: SIGUSR1 received.  Doing graceful restart
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using localhost.localdomain. Set the 'ServerName' directive globally to suppress this message
+[Sun Mar 22 16:45:21.590197 2026] [lbmethod_heartbeat:notice] [pid 2957351:tid 2957351] AH02282: No slotmem from mod_heartmonitor
+[Sun Mar 22 16:45:21.593812 2026] [mpm_event:notice] [pid 2957351:tid 2957351] AH00489: Apache/2.4.62 (Rocky Linux) configured -- resuming normal operations
+[Sun Mar 22 16:45:21.593840 2026] [core:notice] [pid 2957351:tid 2957351] AH00094: Command line: '/usr/sbin/httpd -D FOREGROUND'
+[Sun Mar 22 16:47:15.295627 2026] [proxy:error] [pid 2959527:tid 2959657] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:47:15.296302 2026] [proxy_http:error] [pid 2959527:tid 2959657] [client 172.23.240.15:52276] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:47:22.332374 2026] [proxy:error] [pid 2959570:tid 2959681] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:47:22.334024 2026] [proxy_http:error] [pid 2959570:tid 2959681] [client 172.23.240.15:53268] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:47:30.516914 2026] [proxy:error] [pid 2959570:tid 2959679] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:47:30.517068 2026] [proxy_http:error] [pid 2959570:tid 2959679] [client 172.23.240.15:54171] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:47:36.462839 2026] [proxy:error] [pid 2959570:tid 2959683] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:47:36.462944 2026] [proxy_http:error] [pid 2959570:tid 2959683] [client 172.23.240.15:57468] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:50:17.584575 2026] [proxy:error] [pid 2959570:tid 2959691] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:50:17.584781 2026] [proxy_http:error] [pid 2959570:tid 2959691] [client 172.23.240.15:58784] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[soc@localhost uta]$
