@@ -1,0 +1,76 @@
+[soc@localhost uta]$ sudo systemctl start httpd
+[soc@localhost uta]$ # 1. Is Apache running?
+sudo systemctl status httpd
+
+# 2. Is the API running?
+sudo systemctl status uta-api
+
+# 3. Any Apache config errors?
+sudo apachectl configtest
+
+# 4. Is the firewall open?
+sudo firewall-cmd --list-services
+● httpd.service - The Apache HTTP Server
+     Loaded: loaded (/usr/lib/systemd/system/httpd.service; enabled; preset: disabled)
+     Active: active (running) since Sun 2026-03-22 16:35:07 EDT; 43s ago
+       Docs: man:httpd.service(8)
+   Main PID: 2957351 (httpd)
+     Status: "Total requests: 3; Idle/Busy workers 100/0;Requests/sec: 0.0769; Bytes served/sec:  73 B/sec"
+      Tasks: 177 (limit: 10947)
+     Memory: 29.6M (peak: 29.9M)
+        CPU: 145ms
+     CGroup: /system.slice/httpd.service
+             ├─2957351 /usr/sbin/httpd -DFOREGROUND
+             ├─2957352 /usr/sbin/httpd -DFOREGROUND
+             ├─2957353 /usr/sbin/httpd -DFOREGROUND
+             ├─2957354 /usr/sbin/httpd -DFOREGROUND
+             └─2957355 /usr/sbin/httpd -DFOREGROUND
+
+Mar 22 16:35:06 localhost.localdomain systemd[1]: Starting The Apache HTTP Server...
+Mar 22 16:35:06 localhost.localdomain httpd[2957351]: AH00558: httpd: Could not reliably determine the server's fully quali>
+Mar 22 16:35:07 localhost.localdomain systemd[1]: Started The Apache HTTP Server.
+Mar 22 16:35:07 localhost.localdomain httpd[2957351]: Server configured, listening on: port 80
+
+● uta-api.service - Unified Threat Alert API
+     Loaded: loaded (/etc/systemd/system/uta-api.service; enabled; preset: disabled)
+     Active: active (running) since Sun 2026-03-22 16:33:08 EDT; 2min 48s ago
+   Main PID: 2957068 (node)
+      Tasks: 12 (limit: 10947)
+     Memory: 33.8M (peak: 54.8M)
+        CPU: 315ms
+     CGroup: /system.slice/uta-api.service
+             └─2957068 node --enable-source-maps /home/soc/uta/artifacts/api-server/dist/index.mjs
+
+Mar 22 16:33:08 localhost.localdomain systemd[1]: Started Unified Threat Alert API.
+Mar 22 16:33:09 localhost.localdomain node[2957068]: [16:33:09.134] INFO (2957068): Server listening
+Mar 22 16:33:09 localhost.localdomain node[2957068]:     port: 8080
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using localhost.localdomain. Set the 'ServerName' directive globally to suppress this message
+Syntax OK
+
+
+cockpit dhcpv6-client ftp http ssh
+[soc@localhost uta]$
+[soc@localhost uta]$
+[soc@localhost uta]$ ^C
+[soc@localhost uta]$
+[soc@localhost uta]$
+[soc@localhost uta]$ sudo systemctl status uta-api
+● uta-api.service - Unified Threat Alert API
+     Loaded: loaded (/etc/systemd/system/uta-api.service; enabled; preset: disabled)
+     Active: active (running) since Sun 2026-03-22 16:33:08 EDT; 3min 9s ago
+   Main PID: 2957068 (node)
+      Tasks: 12 (limit: 10947)
+     Memory: 33.9M (peak: 54.8M)
+        CPU: 318ms
+     CGroup: /system.slice/uta-api.service
+             └─2957068 node --enable-source-maps /home/soc/uta/artifacts/api-server/dist/index.mjs
+
+Mar 22 16:33:08 localhost.localdomain systemd[1]: Started Unified Threat Alert API.
+Mar 22 16:33:09 localhost.localdomain node[2957068]: [16:33:09.134] INFO (2957068): Server listening
+Mar 22 16:33:09 localhost.localdomain node[2957068]:     port: 8080
+[soc@localhost uta]$ sudo apachectl configtest
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using localhost.localdomain. Set the 'ServerName' directive globally to suppress this message
+Syntax OK
+[soc@localhost uta]$ sudo firewall-cmd --list-services
+cockpit dhcpv6-client ftp http ssh
+[soc@localhost uta]$
