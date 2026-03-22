@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = path.resolve(__dirname, "../../soc-auth-data.json");
+const DATA_FILE = process.env.SOC_DATA_FILE || path.resolve(__dirname, "../../soc-auth-data.json");
 
 const JWT_SECRET = process.env.JWT_SECRET || "soc-map-center-secret-key-2024";
 
