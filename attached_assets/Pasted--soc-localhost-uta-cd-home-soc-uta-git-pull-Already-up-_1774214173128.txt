@@ -1,0 +1,102 @@
+[soc@localhost uta]$ cd /home/soc/uta
+git pull
+Already up to date.
+[soc@localhost uta]$ bash npm-deploy.sh
+sudo systemctl restart uta-api.service
+
+>>> Step 1/6 — patching package.json files for npm compatibility
+PATCHED_LIB:api-zod
+PATCHED_LIB:api-client-react
+PATCHED_ARTIFACT:api-server
+PATCHED_ARTIFACT:soc-dashboard
+
+>>> Step 2/6 — installing lib/api-zod
+
+found 0 vulnerabilities
+
+>>> Step 3/6 — installing lib/api-client-react
+
+found 0 vulnerabilities
+
+>>> Step 4/6 — building API server
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 723ms
+
+>>> Step 5/6 — building dashboard
+vite v7.3.1 building client environment for production...
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+✓ 2582 modules transformed.
+dist/public/index.html                   0.73 kB │ gzip:   0.41 kB
+dist/public/assets/index-kPZ8S6WB.css  124.13 kB │ gzip:  18.95 kB
+dist/public/assets/index-BinkSfLI.js   722.36 kB │ gzip: 209.25 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 11.68s
+
+>>> Step 6/6 — done!
+
+  API server : /home/soc/uta/artifacts/api-server/dist/index.mjs
+  Dashboard  : /home/soc/uta/artifacts/soc-dashboard/dist/public/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Start the API server with PM2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  npm install -g pm2
+
+  SOC_DATA_FILE=/home/soc/uta/artifacts/soc-auth-data.json \
+  PORT=8080 \
+  pm2 start node --name uta-api \
+    -- --enable-source-maps /home/soc/uta/artifacts/api-server/dist/index.mjs
+
+  pm2 save && pm2 startup
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Configure Apache httpd
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo cp /home/soc/uta/deploy/uta.conf /etc/httpd/conf.d/uta.conf
+  sudo sed -i "s|/srv/uta|/home/soc/uta|g" /etc/httpd/conf.d/uta.conf
+  sudo setsebool -P httpd_can_network_connect 1
+  sudo firewall-cmd --permanent --add-service=http && sudo firewall-cmd --reload
+  sudo systemctl enable --now httpd
+
+
+Restoring original package.json files...
+[soc@localhost uta]$ cat > /home/soc/uta/artifacts/api-server/src/routes/index.ts << 'EOF'
+import { Router, type IRouter } from "express";
+import healthRouter from "./health.js";
+import authRouter from "./auth.js";
+import s1Router from "./s1.js";
+import lrRouter from "./lr.js";
+import adminRouter from "./admin.js";
+import threatIntelRouter from "./threatintel.js";
+import hnRouter from "./hn.js";
+const router: IRouter = Router();
+router.use(healthRouter);
+router.use("/auth", authRouter);
+router.use("/s1", s1Router);
+router.use("/lr", lrRouter);
+router.use("/admin", adminRouter);
+router.use("/threatintel", threatIntelRouter);
+router.use("/", hnRouter);
+export default router;
+EOF
+[soc@localhost uta]$ git diff --stat HEAD
+ artifacts/api-server/src/routes/index.ts | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+[soc@localhost uta]$
