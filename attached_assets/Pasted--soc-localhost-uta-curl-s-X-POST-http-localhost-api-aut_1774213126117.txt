@@ -1,0 +1,28 @@
+[soc@localhost uta]$ curl -s -X POST http://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}'
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<html><head>
+<title>503 Service Unavailable</title>
+</head><body>
+<h1>Service Unavailable</h1>
+<p>The server is temporarily unable to service your
+request due to maintenance downtime or capacity
+problems. Please try again later.</p>
+</body></html>
+[soc@localhost uta]$ sudo tail -20 /var/log/httpd/uta-error.log 2>/dev/null || sudo tail -20 /var/log/httpd/error_log
+[Sun Mar 22 16:57:11.866819 2026] [proxy:error] [pid 2961706:tid 2961807] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:57:11.866896 2026] [proxy_http:error] [pid 2961706:tid 2961807] [client 172.23.240.15:58211] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:57:12.735582 2026] [proxy:error] [pid 2961706:tid 2961809] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:57:12.735686 2026] [proxy_http:error] [pid 2961706:tid 2961809] [client 172.23.240.15:61614] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:57:13.169815 2026] [proxy:error] [pid 2961706:tid 2961805] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:57:13.169923 2026] [proxy_http:error] [pid 2961706:tid 2961805] [client 172.23.240.15:64066] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:57:13.367806 2026] [proxy:error] [pid 2961706:tid 2961803] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:57:13.367908 2026] [proxy_http:error] [pid 2961706:tid 2961803] [client 172.23.240.15:54855] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:57:13.583810 2026] [proxy:error] [pid 2961706:tid 2961814] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:57:13.583910 2026] [proxy_http:error] [pid 2961706:tid 2961814] [client 172.23.240.15:55873] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:57:13.792909 2026] [proxy:error] [pid 2961707:tid 2961821] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:57:13.793002 2026] [proxy_http:error] [pid 2961707:tid 2961821] [client 172.23.240.15:65310] AH01114: HTTP: failed to make connection to backend: 127.0.0.1, referer: http://172.22.231.72/login
+[Sun Mar 22 16:58:58.243313 2026] [proxy:error] [pid 2961708:tid 2961854] (111)Connection refused: AH00957: http: attempt to connect to 127.0.0.1:3001 (127.0.0.1:3001) failed
+[Sun Mar 22 16:58:58.243423 2026] [proxy_http:error] [pid 2961708:tid 2961854] [client ::1:41566] AH01114: HTTP: failed to make connection to backend: 127.0.0.1
+[soc@localhost uta]$
