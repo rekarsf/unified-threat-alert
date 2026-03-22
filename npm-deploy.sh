@@ -64,8 +64,16 @@ const apiZodPkg = patchPkg(path.join(REPO, "lib/api-zod/package.json"));
 fs.writeFileSync(path.join(REPO, "lib/api-zod/package.json.npm"), JSON.stringify(apiZodPkg, null, 2));
 console.log("PATCHED_LIB:api-zod");
 
-// lib/api-client-react — used throughout the dashboard
+// lib/api-client-react — used throughout the dashboard.
+// Move @tanstack/react-query to peerDependencies so npm does NOT install
+// a local copy inside lib/api-client-react/node_modules. If it did, Vite
+// would bundle two separate instances causing "No QueryClient" errors.
 const apiClientPkg = patchPkg(path.join(REPO, "lib/api-client-react/package.json"));
+const rqVersion = apiClientPkg.dependencies?.["@tanstack/react-query"];
+if (rqVersion) {
+  delete apiClientPkg.dependencies["@tanstack/react-query"];
+  apiClientPkg.peerDependencies = { ...apiClientPkg.peerDependencies, "@tanstack/react-query": rqVersion };
+}
 fs.writeFileSync(path.join(REPO, "lib/api-client-react/package.json.npm"), JSON.stringify(apiClientPkg, null, 2));
 console.log("PATCHED_LIB:api-client-react");
 
