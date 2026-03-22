@@ -17,23 +17,23 @@ const catalog = {
   "@replit/vite-plugin-dev-banner":         "^0.1.1",
   "@replit/vite-plugin-runtime-error-modal":"^0.0.6",
   "@tailwindcss/vite":                      "^4.1.14",
-  "@tanstack/react-query":                  "^5.90.21",
-  "@types/node":                            "^22.0.0",
-  "@types/react":                           "^19.2.0",
-  "@types/react-dom":                       "^19.2.0",
-  "@vitejs/plugin-react":                   "^5.0.4",
+  "@tanstack/react-query":                  "^5.90.0",
+  "@types/node":                            "^22.15.0",
+  "@types/react":                           "^19.1.0",
+  "@types/react-dom":                       "^19.1.0",
+  "@vitejs/plugin-react":                   "^5.0.0",
   "class-variance-authority":               "^0.7.1",
   "clsx":                                   "^2.1.1",
   "drizzle-orm":                            "^0.43.0",
   "framer-motion":                          "12.35.1",
-  "lucide-react":                           "^0.544.0",
+  "lucide-react":                           "^0.511.0",
   "react":                                  "19.1.0",
   "react-dom":                              "19.1.0",
   "tailwind-merge":                         "^3.3.1",
   "tailwindcss":                            "^4.1.14",
   "tsx":                                    "^4.19.0",
-  "vite":                                   "^6.3.5",
-  "zod":                                    "^3.25.0",
+  "vite":                                   "^7.0.0",
+  "zod":                                    "^3.24.0",
 };
 
 const fs = (await import("fs")).default;
@@ -49,7 +49,9 @@ function patchPkg(pkgPath, removeDeps = []) {
       if (v === "catalog:" || v.startsWith("catalog:")) {
         pkg[section][k] = catalog[k] ?? "*";
       } else if (v.startsWith("workspace:")) {
-        pkg[section][k] = "file:" + path.join(REPO, "lib", k.replace("@workspace/", ""));
+        // Use absolute file: path so npm resolves correctly from any directory
+        const libName = k.replace("@workspace/", "");
+        pkg[section][k] = "file:" + path.join(REPO, "lib", libName);
       }
     }
   }
@@ -57,12 +59,17 @@ function patchPkg(pkgPath, removeDeps = []) {
   return pkg;
 }
 
-// lib/api-zod — only needs zod
+// lib/api-zod — used by api-server health check
 const apiZodPkg = patchPkg(path.join(REPO, "lib/api-zod/package.json"));
 fs.writeFileSync(path.join(REPO, "lib/api-zod/package.json.npm"), JSON.stringify(apiZodPkg, null, 2));
 console.log("PATCHED_LIB:api-zod");
 
-// api-server — remove @workspace/db (not imported, causes install failure)
+// lib/api-client-react — used throughout the dashboard
+const apiClientPkg = patchPkg(path.join(REPO, "lib/api-client-react/package.json"));
+fs.writeFileSync(path.join(REPO, "lib/api-client-react/package.json.npm"), JSON.stringify(apiClientPkg, null, 2));
+console.log("PATCHED_LIB:api-client-react");
+
+// api-server — remove @workspace/db (not imported anywhere in source)
 const apiPkg = patchPkg(
   path.join(REPO, "artifacts/api-server/package.json"),
   ["@workspace/db"]
@@ -70,10 +77,10 @@ const apiPkg = patchPkg(
 fs.writeFileSync(path.join(REPO, "artifacts/api-server/package.json.npm"), JSON.stringify(apiPkg, null, 2));
 console.log("PATCHED_ARTIFACT:api-server");
 
-// soc-dashboard — remove @workspace/api-client-react (not critical for build)
+// soc-dashboard — keep api-client-react, remove unused api-spec
 const dashPkg = patchPkg(
   path.join(REPO, "artifacts/soc-dashboard/package.json"),
-  ["@workspace/api-client-react", "@workspace/api-spec"]
+  ["@workspace/api-spec"]
 );
 fs.writeFileSync(path.join(REPO, "artifacts/soc-dashboard/package.json.npm"), JSON.stringify(dashPkg, null, 2));
 console.log("PATCHED_ARTIFACT:soc-dashboard");
@@ -100,46 +107,47 @@ restore_patch() {
 
 trap 'echo ""; echo "Restoring original package.json files..."; \
   restore_patch "$REPO/lib/api-zod"; \
+  restore_patch "$REPO/lib/api-client-react"; \
   restore_patch "$REPO/artifacts/api-server"; \
   restore_patch "$REPO/artifacts/soc-dashboard"' EXIT
 
-log "Step 1/5 — patching package.json files for npm compatibility"
+log "Step 1/6 — patching package.json files for npm compatibility"
 resolve_catalog
 
 apply_patch "$REPO/lib/api-zod"
+apply_patch "$REPO/lib/api-client-react"
 apply_patch "$REPO/artifacts/api-server"
 apply_patch "$REPO/artifacts/soc-dashboard"
 
-# ── Install lib/api-zod first ────────────────────────────────────
-log "Step 2/5 — installing lib/api-zod"
+# ── Install lib packages ──────────────────────────────────────────
+log "Step 2/6 — installing lib/api-zod"
 cd "$REPO/lib/api-zod"
-npm install --legacy-peer-deps --prefer-offline 2>&1 | tail -3
+npm install --legacy-peer-deps --prefer-offline 2>&1 | tail -2
+
+log "Step 3/6 — installing lib/api-client-react"
+cd "$REPO/lib/api-client-react"
+npm install --legacy-peer-deps --prefer-offline 2>&1 | tail -2
 
 # ── Build API server ─────────────────────────────────────────────
-log "Step 3/5 — installing api-server dependencies"
+log "Step 4/6 — building API server"
 cd "$REPO/artifacts/api-server"
-npm install --legacy-peer-deps 2>&1 | grep -E "added|error|warn" | tail -5
-
-log "Building API server..."
+npm install --legacy-peer-deps 2>&1 | grep -E "^added|error" | tail -3
 node ./build.mjs
 
 # ── Build dashboard ──────────────────────────────────────────────
-log "Step 4/5 — installing dashboard dependencies"
+log "Step 5/6 — building dashboard"
 cd "$REPO/artifacts/soc-dashboard"
-npm install --legacy-peer-deps 2>&1 | grep -E "added|error|warn" | tail -5
-
-log "Building dashboard..."
+npm install --legacy-peer-deps 2>&1 | grep -E "^added|error" | tail -3
 BASE_PATH=/ PORT=3000 npx vite build --config vite.config.ts
 
 # ── Done ─────────────────────────────────────────────────────────
-log "Step 5/5 — done!"
+log "Step 6/6 — done!"
 echo ""
-echo "Built files:"
 echo "  API server : $REPO/artifacts/api-server/dist/index.mjs"
 echo "  Dashboard  : $REPO/artifacts/soc-dashboard/dist/public/"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " Next: start the API server"
+echo " Start the API server with PM2"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  npm install -g pm2"
@@ -152,11 +160,11 @@ echo ""
 echo "  pm2 save && pm2 startup"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " Next: configure Apache"
+echo " Configure Apache httpd"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  sudo cp $REPO/deploy/uta.conf /etc/httpd/conf.d/uta.conf"
-echo "  sudo sed -i 's|/srv/uta|$REPO|g' /etc/httpd/conf.d/uta.conf"
+echo "  sudo sed -i \"s|/srv/uta|$REPO|g\" /etc/httpd/conf.d/uta.conf"
 echo "  sudo setsebool -P httpd_can_network_connect 1"
 echo "  sudo firewall-cmd --permanent --add-service=http && sudo firewall-cmd --reload"
 echo "  sudo systemctl enable --now httpd"
