@@ -1,0 +1,55 @@
+[soc@localhost ~]$ git clone https://github.com/rekarsf/unified-threat-alert.git ~/uta
+cd ~/uta
+bash npm-deploy.sh
+Cloning into '/home/soc/uta'...
+remote: Enumerating objects: 312, done.
+remote: Counting objects: 100% (312/312), done.
+remote: Compressing objects: 100% (299/299), done.
+remote: Total 312 (delta 94), reused 0 (delta 0), pack-reused 0 (from 0)
+Receiving objects: 100% (312/312), 309.28 KiB | 1.04 MiB/s, done.
+Resolving deltas: 100% (94/94), done.
+
+>>> Step 1/6 — patching package.json files for npm compatibility
+PATCHED_LIB:api-zod
+PATCHED_LIB:db
+PATCHED_LIB:api-client-react
+PATCHED_LIB:api-spec
+PATCHED_ARTIFACT:api-server
+PATCHED_ARTIFACT:soc-dashboard
+
+>>> Step 2/6 — installing lib/api-zod
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+>>> Step 3/6 — installing lib/db (if used by api-server)
+npm error notarget In most cases you or one of your dependencies are requesting
+npm error notarget a package version that doesn't exist.
+npm error A complete log of this run can be found in: /home/soc/.npm/_logs/2026-03-22T20_13_48_850Z-debug-0.log
+
+>>> Step 4/6 — building the API server
+npm error
+npm error
+npm error For a full report see:
+npm error /home/soc/.npm/_logs/2026-03-22T20_14_57_171Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/soc/.npm/_logs/2026-03-22T20_14_57_171Z-debug-0.log
+node:internal/modules/esm/resolve:873
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'esbuild' imported from /home/soc/uta/artifacts/api-server/build.mjs
+    at packageResolve (node:internal/modules/esm/resolve:873:9)
+    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v20.20.0
+
+Restoring original package.json files...
+[soc@localhost uta]$
