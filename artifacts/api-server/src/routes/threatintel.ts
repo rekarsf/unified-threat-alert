@@ -407,6 +407,100 @@ router.get("/overview", async (_req, res) => {
   res.json({ sources: results, timestamp: new Date().toISOString() });
 });
 
+// ─── Feodo Tracker ──────────────────────────────────────────────────────────
+router.get("/feodo", async (_req, res) => {
+  const resp = await safeFetch("https://feodotracker.abuse.ch/downloads/ipblocklist.json", {}, 12000);
+  if (resp?.ok) {
+    const raw = await resp.json() as any;
+    const list: any[] = Array.isArray(raw) ? raw : (raw.blocklist ?? []);
+    const items = list.slice(0, 150).map((e: any) => ({
+      id: `${e.ip_address}:${e.port}`,
+      ip: e.ip_address,
+      port: e.port,
+      status: e.status,
+      hostname: e.hostname,
+      abuseScore: e.abuse_ch_score ?? null,
+      country: e.country,
+      firstSeen: e.first_seen,
+      lastSeen: e.last_online ?? e.last_seen,
+      malware: e.malware,
+      asnName: e.as_name,
+    }));
+    res.json({ data: items, source: "feodo", total: list.length });
+    return;
+  }
+  const mock = [
+    { id: "185.220.101.1:443", ip: "185.220.101.1", port: 443, status: "online", hostname: null, abuseScore: 100, country: "NL", firstSeen: new Date(Date.now() - 86400000).toISOString(), lastSeen: new Date().toISOString(), malware: "Cobalt Strike", asnName: "AS-CHOOPA" },
+    { id: "45.61.186.13:8080", ip: "45.61.186.13", port: 8080, status: "online", hostname: null, abuseScore: 95, country: "US", firstSeen: new Date(Date.now() - 172800000).toISOString(), lastSeen: new Date().toISOString(), malware: "QakBot", asnName: "VULTR-AS" },
+    { id: "194.165.16.11:443", ip: "194.165.16.11", port: 443, status: "offline", hostname: null, abuseScore: 80, country: "RU", firstSeen: new Date(Date.now() - 604800000).toISOString(), lastSeen: new Date(Date.now() - 86400000).toISOString(), malware: "Emotet", asnName: "SELECTEL" },
+  ];
+  res.json({ data: mock, source: "feodo", total: mock.length, mock: true });
+});
+
+// ─── GitHub Security Advisories ─────────────────────────────────────────────
+router.get("/ghsa", async (req, res) => {
+  const severity = (req.query.severity as string) || "";
+  let url = "https://api.github.com/advisories?per_page=30&type=reviewed&direction=desc&sort=published";
+  if (severity) url += `&severity=${severity}`;
+  const resp = await safeFetch(url, {
+    headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "UnifiedThreatAlert/1.0" },
+  }, 12000);
+  if (resp?.ok) {
+    const raw = await resp.json() as any[];
+    const items = (Array.isArray(raw) ? raw : []).map((a: any) => ({
+      id: a.ghsa_id,
+      ghsaId: a.ghsa_id,
+      cveId: a.cve_id,
+      summary: a.summary,
+      description: (a.description || "").slice(0, 300),
+      severity: (a.severity || "unknown").toUpperCase(),
+      cvss: a.cvss?.score ?? null,
+      cwes: (a.cwes || []).map((c: any) => c.cwe_id),
+      publishedAt: a.published_at,
+      updatedAt: a.updated_at,
+      ecosystem: a.vulnerabilities?.[0]?.package?.ecosystem,
+      packageName: a.vulnerabilities?.[0]?.package?.name,
+      references: (a.references || []).slice(0, 3),
+      url: a.html_url,
+    }));
+    res.json({ data: items, source: "ghsa", total: items.length });
+    return;
+  }
+  const mock = [
+    { id: "GHSA-xxxx-yyyy-zzzz", ghsaId: "GHSA-xxxx-yyyy-zzzz", cveId: "CVE-2024-12345", summary: "Critical RCE in popular npm package allows arbitrary code execution", description: "A remote code execution vulnerability exists in the affected package.", severity: "CRITICAL", cvss: 9.8, cwes: ["CWE-78"], publishedAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date().toISOString(), ecosystem: "npm", packageName: "example-pkg", references: [], url: "https://github.com/advisories/GHSA-xxxx-yyyy-zzzz" },
+    { id: "GHSA-aaaa-bbbb-cccc", ghsaId: "GHSA-aaaa-bbbb-cccc", cveId: "CVE-2024-67890", summary: "SQL injection in Python web framework allows data exfiltration", description: "An SQL injection vulnerability in the query builder permits data exfiltration.", severity: "HIGH", cvss: 7.5, cwes: ["CWE-89"], publishedAt: new Date(Date.now() - 172800000).toISOString(), updatedAt: new Date().toISOString(), ecosystem: "pip", packageName: "example-framework", references: [], url: "https://github.com/advisories/GHSA-aaaa-bbbb-cccc" },
+  ];
+  res.json({ data: mock, source: "ghsa", total: mock.length, mock: true });
+});
+
+// ─── EPSS (Exploit Prediction Scoring System) ────────────────────────────────
+router.get("/epss", async (req, res) => {
+  const cve = (req.query.cve as string) || "";
+  let url = "https://api.first.org/data/v1/epss?limit=50&order=!epss";
+  if (cve) url = `https://api.first.org/data/v1/epss?cve=${encodeURIComponent(cve)}`;
+  const resp = await safeFetch(url, {}, 12000);
+  if (resp?.ok) {
+    const raw = await resp.json() as any;
+    const items = (raw.data ?? []).map((e: any) => ({
+      id: e.cve,
+      cveId: e.cve,
+      epss: parseFloat(e.epss),
+      percentile: parseFloat(e.percentile),
+      date: e.date,
+    }));
+    res.json({ data: items, source: "epss", total: raw.total ?? items.length, date: raw.date });
+    return;
+  }
+  const mock = [
+    { id: "CVE-2023-46805", cveId: "CVE-2023-46805", epss: 0.9731, percentile: 0.9999, date: new Date().toISOString().slice(0, 10) },
+    { id: "CVE-2024-21887", cveId: "CVE-2024-21887", epss: 0.9654, percentile: 0.9997, date: new Date().toISOString().slice(0, 10) },
+    { id: "CVE-2023-4966", cveId: "CVE-2023-4966", epss: 0.9567, percentile: 0.9995, date: new Date().toISOString().slice(0, 10) },
+    { id: "CVE-2023-22527", cveId: "CVE-2023-22527", epss: 0.9501, percentile: 0.9993, date: new Date().toISOString().slice(0, 10) },
+    { id: "CVE-2024-3400", cveId: "CVE-2024-3400", epss: 0.9489, percentile: 0.9991, date: new Date().toISOString().slice(0, 10) },
+  ];
+  res.json({ data: mock, source: "epss", total: mock.length, mock: true });
+});
+
 // ─── GeoIP ──────────────────────────────────────────────────────────────────
 router.get("/geoip/:ip", async (req, res) => {
   const { ip } = req.params;

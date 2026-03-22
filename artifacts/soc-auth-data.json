@@ -27,12 +27,52 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-22T21:05:18.073Z",
+      "lastLogin": "2026-03-22T21:13:32.790Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "4abb70c9-db0a-4e69-9878-2bf2fb4358ba",
+      "timestamp": "2026-03-22T21:13:32.791Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "6146f6b7-0207-4e20-b15b-e3c882ac147c",
+      "timestamp": "2026-03-22T21:12:45.033Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "9f66ec9a-3343-4ef7-b2a5-9537abc39466",
+      "timestamp": "2026-03-22T21:11:28.401Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "fa51b2cb-428e-4d3d-9b6a-3fbf249484a9",
+      "timestamp": "2026-03-22T21:10:52.277Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "2a2e51a4-e492-4978-809a-01ce90891dfc",
+      "timestamp": "2026-03-22T21:10:43.273Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
     {
       "id": "b2956fd2-7587-4dd8-aae6-93b29d51bf0d",
       "timestamp": "2026-03-22T21:05:18.073Z",

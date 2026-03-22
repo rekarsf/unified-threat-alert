@@ -14,7 +14,7 @@ router.use("/auth", authRouter);
 router.use("/s1", s1Router);
 router.use("/lr", lrRouter);
 router.use("/admin", adminRouter);
-router.use("/", threatIntelRouter);
+router.use("/threatintel", threatIntelRouter);
 router.use("/", hnRouter);
 
 export default router;

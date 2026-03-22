@@ -11,7 +11,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-type Source = 'overview' | 'hackernews' | 'cisa-kev' | 'nvd' | 'otx' | 'threatfox' | 'urlhaus' | 'malwarebazaar' | 'circl' | 'virustotal' | 'shodan' | 'abuseipdb' | 'reddit';
+type Source = 'overview' | 'hackernews' | 'cisa-kev' | 'nvd' | 'otx' | 'threatfox' | 'urlhaus' | 'malwarebazaar' | 'circl' | 'virustotal' | 'shodan' | 'abuseipdb' | 'reddit' | 'feodo' | 'ghsa' | 'epss';
 
 interface Tab { id: Source; label: string; icon: React.ReactNode; color: string; }
 
@@ -29,6 +29,9 @@ const TABS: Tab[] = [
   { id: 'shodan',       label: 'Shodan',         icon: <Server className="w-3.5 h-3.5" />,    color: 'text-amber-400' },
   { id: 'abuseipdb',    label: 'AbuseIPDB',      icon: <Hash className="w-3.5 h-3.5" />,      color: 'text-red-400' },
   { id: 'reddit',       label: 'Reddit',         icon: <MessageCircle className="w-3.5 h-3.5" />, color: 'text-orange-500' },
+  { id: 'feodo',        label: 'Feodo Tracker',  icon: <Server className="w-3.5 h-3.5" />,        color: 'text-red-500' },
+  { id: 'ghsa',         label: 'GitHub Advisories', icon: <Shield className="w-3.5 h-3.5" />,     color: 'text-violet-400' },
+  { id: 'epss',         label: 'EPSS',           icon: <Zap className="w-3.5 h-3.5" />,           color: 'text-yellow-300' },
 ];
 
 const SOURCE_DOCS: Record<string, { url: string; desc: string }> = {
@@ -44,6 +47,9 @@ const SOURCE_DOCS: Record<string, { url: string; desc: string }> = {
   shodan:        { url: 'https://www.shodan.io', desc: 'Internet-wide scanner for exposed services and vulnerabilities. API key required.' },
   abuseipdb:     { url: 'https://www.abuseipdb.com', desc: 'Crowdsourced IP address abuse database. API key required (free tier available).' },
   reddit:        { url: 'https://www.reddit.com/r/netsec', desc: 'Security communities on Reddit: r/netsec, r/cybersecurity, r/blueteamsec, r/Malware.' },
+  feodo:         { url: 'https://feodotracker.abuse.ch', desc: 'abuse.ch Feodo Tracker — active botnet C2 IP blocklist (Cobalt Strike, QakBot, Emotet, etc.). No API key required.' },
+  ghsa:          { url: 'https://github.com/advisories', desc: 'GitHub Security Advisory Database — peer-reviewed security advisories for open source packages. No API key required.' },
+  epss:          { url: 'https://www.first.org/epss', desc: 'FIRST.org Exploit Prediction Scoring System — probability a CVE will be exploited in the wild. No API key required.' },
 };
 
 function useTI(source: string, params: Record<string, string> = {}, enabled = true) {
@@ -678,6 +684,158 @@ function RedditTab() {
   );
 }
 
+// ── Feodo Tracker tab ────────────────────────────────────────────────────────
+
+function FeodoTab() {
+  const [search, setSearch] = useState('');
+  const { data, isLoading, refetch } = useTI('feodo');
+  const items: any[] = (data?.data || []).filter((e: any) =>
+    !search || e.ip?.includes(search) || e.malware?.toLowerCase().includes(search.toLowerCase()) || e.country?.toLowerCase().includes(search.toLowerCase())
+  );
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      <SourceHeader source="feodo" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
+        <Search className="w-3.5 h-3.5 text-muted-foreground" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by IP, malware family, or country..."
+          className="flex-1 bg-transparent text-xs font-mono focus:outline-none placeholder:text-muted-foreground/50 text-foreground" />
+      </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-border">
+        {isLoading ? <LoadingRow /> : items.map((e: any) => (
+          <div key={e.id} className="p-3.5 hover:bg-secondary/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className={`shrink-0 w-2 h-2 rounded-full ${e.status === 'online' ? 'bg-red-400 animate-pulse' : 'bg-gray-500'}`} />
+              <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
+                <code className="text-xs font-mono text-red-400 font-bold">{e.ip}:{e.port}</code>
+                {e.malware && <span className="text-xs font-mono text-orange-400">{e.malware}</span>}
+                <span className={`text-[10px] font-mono font-bold ${e.status === 'online' ? 'text-red-400' : 'text-gray-400'}`}>{e.status?.toUpperCase()}</span>
+                {e.country && <span className="text-[10px] font-mono text-muted-foreground">{e.country}</span>}
+                {e.asnName && <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[160px]">{e.asnName}</span>}
+                {e.abuseScore != null && <span className={`text-[10px] font-mono font-bold ${e.abuseScore >= 80 ? 'text-red-400' : e.abuseScore >= 50 ? 'text-orange-400' : 'text-yellow-400'}`}>Score: {e.abuseScore}</span>}
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground/60 shrink-0 text-right">
+                {e.lastSeen ? formatDistanceToNow(new Date(e.lastSeen), { addSuffix: true }) : '—'}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── GitHub Advisories tab ─────────────────────────────────────────────────────
+
+const GHSA_SEVERITIES = ['', 'critical', 'high', 'medium', 'low'];
+
+function GhsaTab() {
+  const [severity, setSeverity] = useState('');
+  const [search, setSearch] = useState('');
+  const { data, isLoading, refetch } = useTI('ghsa', { severity });
+  const items: any[] = (data?.data || []).filter((a: any) =>
+    !search || a.summary?.toLowerCase().includes(search.toLowerCase()) ||
+    a.cveId?.toLowerCase().includes(search.toLowerCase()) ||
+    a.packageName?.toLowerCase().includes(search.toLowerCase())
+  );
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      <SourceHeader source="ghsa" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-3">
+        <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter advisory, CVE, or package..."
+          className="flex-1 bg-transparent text-xs font-mono focus:outline-none placeholder:text-muted-foreground/50 text-foreground" />
+        <div className="flex gap-1 shrink-0">
+          {GHSA_SEVERITIES.map(s => (
+            <button key={s} onClick={() => setSeverity(s)}
+              className={`text-[11px] font-mono px-2 py-0.5 rounded border transition-all ${severity === s ? 'text-primary bg-primary/20 border-primary/50' : 'text-muted-foreground border-border hover:border-primary/30'}`}>
+              {s || 'All'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-border">
+        {isLoading ? <LoadingRow /> : items.map((a: any) => (
+          <div key={a.id} className="p-4 hover:bg-secondary/20 transition-colors">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 flex flex-col gap-1">
+                <SevBadge sev={a.severity} />
+                {a.cvss != null && <ScoreBadge score={a.cvss} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a href={a.url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs font-mono font-bold text-violet-400 hover:underline flex items-center gap-1">
+                    {a.ghsaId} <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                  {a.cveId && <span className="text-xs font-mono text-primary">{a.cveId}</span>}
+                  {a.ecosystem && <Tag label={a.ecosystem} />}
+                  {a.packageName && <Tag label={a.packageName} />}
+                  {a.cwes?.map((c: string) => <Tag key={c} label={c} />)}
+                </div>
+                <p className="text-xs text-foreground font-mono mt-1 font-bold">{a.summary}</p>
+                {a.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.description}</p>}
+                {a.publishedAt && <p className="text-[10px] font-mono text-muted-foreground/60 mt-1.5 flex items-center gap-1"><Clock className="w-3 h-3" />{format(new Date(a.publishedAt), 'yyyy-MM-dd')}</p>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── EPSS tab ──────────────────────────────────────────────────────────────────
+
+function EpssTab() {
+  const [cveSearch, setCveSearch] = useState('');
+  const [activeCve, setActiveCve] = useState('');
+  const { data, isLoading, refetch } = useTI('epss', activeCve ? { cve: activeCve } : {});
+  const items: any[] = data?.data || [];
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      <SourceHeader source="epss" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
+        <Search className="w-3.5 h-3.5 text-muted-foreground" />
+        <input value={cveSearch} onChange={e => setCveSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && setActiveCve(cveSearch.trim())}
+          placeholder="Look up CVE-YYYY-NNNNN or leave blank for top 50 by score..."
+          className="flex-1 bg-transparent text-xs font-mono focus:outline-none placeholder:text-muted-foreground/50 text-foreground" />
+        <button onClick={() => setActiveCve(cveSearch.trim())} className="px-2.5 h-7 bg-primary/20 border border-primary/40 text-primary font-mono text-xs rounded-md hover:bg-primary/30">GO</button>
+        {activeCve && <button onClick={() => { setActiveCve(''); setCveSearch(''); }} className="text-muted-foreground hover:text-foreground text-xs font-mono">×clear</button>}
+      </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-border">
+        {isLoading ? <LoadingRow /> : items.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-muted-foreground font-mono text-sm">No EPSS data found</div>
+        ) : items.map((e: any) => {
+          const pct = Math.round((e.epss || 0) * 100 * 10) / 10;
+          const barColor = pct >= 70 ? 'bg-red-500' : pct >= 40 ? 'bg-orange-500' : pct >= 10 ? 'bg-yellow-500' : 'bg-green-500';
+          return (
+            <div key={e.id} className="p-3.5 hover:bg-secondary/20 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="shrink-0 w-16 text-right">
+                  <div className={`text-sm font-mono font-bold ${pct >= 70 ? 'text-red-400' : pct >= 40 ? 'text-orange-400' : pct >= 10 ? 'text-yellow-400' : 'text-green-400'}`}>{pct.toFixed(1)}%</div>
+                  <div className="text-[9px] text-muted-foreground font-mono">EPSS</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <a href={`https://nvd.nist.gov/vuln/detail/${e.cveId}`} target="_blank" rel="noopener noreferrer"
+                      className="text-xs font-mono font-bold text-primary hover:underline flex items-center gap-1">
+                      {e.cveId} <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                    {e.percentile != null && <span className="text-[10px] font-mono text-muted-foreground">top {((1 - e.percentile) * 100).toFixed(1)}%</span>}
+                  </div>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-secondary overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── API-key-required tabs ────────────────────────────────────────────────────
 
 function ApiKeyTab({ source }: { source: string }) {
@@ -722,6 +880,9 @@ export default function ThreatIntelPage() {
       case 'shodan':       return <ApiKeyTab source="shodan" />;
       case 'abuseipdb':    return <ApiKeyTab source="abuseipdb" />;
       case 'reddit':       return <RedditTab />;
+      case 'feodo':        return <FeodoTab />;
+      case 'ghsa':         return <GhsaTab />;
+      case 'epss':         return <EpssTab />;
     }
   };
 
