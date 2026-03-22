@@ -95,25 +95,45 @@ function LoadingRow() {
   );
 }
 
-function RequiresKey({ source, keyName }: { source: string; keyName: string }) {
+const SOURCE_SETTINGS_LABEL: Record<string, string> = {
+  otx:        'AlienVault OTX → OTX API Key',
+  virustotal: 'VirusTotal → API Key',
+  shodan:     'Shodan → API Key',
+  abuseipdb:  'AbuseIPDB → API Key',
+};
+
+function RequiresKey({ source }: { source: string }) {
+  const label = SOURCE_SETTINGS_LABEL[source] || source;
+  const tab = TABS.find(t => t.id === source);
   return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4 text-center px-8">
+    <div className="flex flex-col items-center justify-center h-64 gap-5 text-center px-8">
       <div className="w-12 h-12 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center">
         <Key className="w-6 h-6 text-yellow-400" />
       </div>
       <div>
-        <p className="text-sm font-mono font-bold text-foreground">API Key Required</p>
-        <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+        <p className="text-sm font-mono font-bold text-foreground">{tab?.label} — API Key Required</p>
+        <p className="text-xs text-muted-foreground mt-1.5 max-w-sm leading-relaxed">
           {SOURCE_DOCS[source]?.desc}
         </p>
       </div>
-      <div className="bg-secondary/60 border border-border rounded-lg px-4 py-3 font-mono text-xs text-left w-full max-w-sm">
-        <div className="text-muted-foreground mb-1">Add to Settings → Threat Intel Keys:</div>
-        <div className="text-primary">{keyName} = <span className="text-muted-foreground italic">your-api-key</span></div>
+      <div className="bg-secondary/60 border border-border rounded-xl px-5 py-4 font-mono text-xs text-left w-full max-w-sm space-y-2">
+        <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">How to activate</p>
+        <div className="flex items-start gap-2">
+          <span className="text-primary shrink-0">1.</span>
+          <span className="text-foreground/80">Go to <a href={`${BASE}/settings`} className="text-primary hover:underline">Settings → Integration Settings</a></span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-primary shrink-0">2.</span>
+          <span className="text-foreground/80">Find <span className="text-primary">{label}</span> and paste your API key</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-primary shrink-0">3.</span>
+          <span className="text-foreground/80">Click Save — this tab will activate automatically</span>
+        </div>
       </div>
       <a href={SOURCE_DOCS[source]?.url} target="_blank" rel="noopener noreferrer"
         className="text-xs text-primary hover:underline flex items-center gap-1">
-        Get API key from {source} <ExternalLink className="w-3 h-3" />
+        Get a free API key from {tab?.label} <ExternalLink className="w-3 h-3" />
       </a>
     </div>
   );
@@ -663,7 +683,7 @@ function RedditTab() {
 function ApiKeyTab({ source }: { source: string }) {
   const { data, isLoading, refetch } = useTI(source as any);
   if (isLoading) return <div className="flex flex-col flex-1 overflow-hidden"><SourceHeader source={source} onRefresh={refetch} isLoading={isLoading} /><LoadingRow /></div>;
-  if (data?.requiresKey) return <div className="flex flex-col flex-1 overflow-hidden"><SourceHeader source={source} onRefresh={refetch} isLoading={isLoading} /><RequiresKey source={source} keyName={data.keyName} /></div>;
+  if (data?.requiresKey) return <div className="flex flex-col flex-1 overflow-hidden"><SourceHeader source={source} onRefresh={refetch} isLoading={isLoading} /><RequiresKey source={source} /></div>;
 
   const items: any[] = data?.data || [];
   return (

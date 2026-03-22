@@ -19,11 +19,26 @@ async function safeFetch(url: string, options: RequestInit = {}, timeoutMs = 800
   }
 }
 
+// Maps our short source name → the key field name saved by the Settings page
+const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+};
+
 async function getApiKey(name: string): Promise<string | null> {
   try {
     const data = getAuthData() as any;
-    const keys: Record<string, string> = data.threatintelKeys || {};
-    return keys[name] || process.env[`THREATINTEL_${name.toUpperCase()}_KEY`] || null;
+    // 1. Check dedicated threatintelKeys store (set via /api/threatintel/keys)
+    const tiKeys: Record<string, string> = data.threatintelKeys || {};
+    if (tiKeys[name]) return tiKeys[name];
+    // 2. Check main settings (set via Settings → Integration Settings)
+    const settings: Record<string, string> = data.settings || {};
+    const settingsKey = SETTINGS_KEY_MAP[name];
+    if (settingsKey && settings[settingsKey]) return settings[settingsKey];
+    // 3. Fall back to environment variable
+    return process.env[`THREATINTEL_${name.toUpperCase()}_KEY`] || null;
   } catch {
     return null;
   }
