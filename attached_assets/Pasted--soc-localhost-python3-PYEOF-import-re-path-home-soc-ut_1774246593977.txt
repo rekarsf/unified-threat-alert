@@ -1,0 +1,52 @@
+[soc@localhost ~]$ python3 - << 'PYEOF'
+import re
+path = "/home/soc/uta/artifacts/api-server/src/routes/threatintel.ts"
+with open(path, "r") as f:
+    content = f.read()
+old = 'res.json({ data: [], source: "epss", total: 0, mock: true });'
+new = '''res.json({ data: [
+    { id: "CVE-2024-27198", cveId: "CVE-2024-27198", epss: 0.94579, percentile: 0.99992, date: "2026-03-22" },
+    { id: "CVE-2023-46805", cveId: "CVE-2023-46805", epss: 0.97310, percentile: 0.99999, date: "2026-03-22" },
+    { id: "CVE-2024-21887", cveId: "CVE-2024-21887", epss: 0.96540, percentile: 0.99997, date: "2026-03-22" },
+    { id: "CVE-2023-4966",  cveId: "CVE-2023-4966",  epss: 0.95670, percentile: 0.99995, date: "2026-03-22" },
+    { id: "CVE-2024-3400",  cveId: "CVE-2024-3400",  epss: 0.94890, percentile: 0.99991, date: "2026-03-22" },
+    { id: "CVE-2023-22527", cveId: "CVE-2023-22527", epss: 0.94100, percentile: 0.99988, date: "2026-03-22" },
+    { id: "CVE-2024-1709",  cveId: "CVE-2024-1709",  epss: 0.93450, percentile: 0.99985, date: "2026-03-22" },
+    { id: "CVE-2024-21412", cveId: "CVE-2024-21412", epss: 0.92800, percentile: 0.99980, date: "2026-03-22" },
+    { id: "CVE-2024-30051", cveId: "CVE-2024-30051", epss: 0.91200, percentile: 0.99975, date: "2026-03-22" },
+    { id: "CVE-2024-38193", cveId: "CVE-2024-38193", epss: 0.90500, percentile: 0.99970, date: "2026-03-22" },
+  ], source: "epss", total: 321918, mock: true });'''
+# Only replace the LAST occurrence (the fallback, not the live path)
+idx = content.rfind(old)
+if idx >= 0:
+    content = content[:idx] + new + content[idx+len(old):]
+    with open(path, "w") as f:
+        f.write(content)
+    print("Patched successfully")
+else:
+    print("Pattern not found — already patched or different content")
+PYEOF
+Patched successfully
+[soc@localhost ~]$ cd /home/soc/uta/artifacts/api-server
+node ./build.mjs && sudo systemctl restart uta-api.service && sleep 3
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 877ms
+[sudo] password for soc:
+[soc@localhost api-server]$ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+[soc@localhost api-server]$ curl -s "http://localhost:8080/api/threatintel/epss" \
+  -H "Authorization: Bearer $TOKEN" | grep -o '"total":[0-9]*'
+"total":321918
+[soc@localhost api-server]$
