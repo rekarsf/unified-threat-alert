@@ -1,0 +1,228 @@
+ cd /home/soc/uta
+git pull origin main
+From https://github.com/rekarsf/unified-threat-alert
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+[soc@localhost uta]$ cd /home/soc/uta/artifacts/api-server
+node ./build.mjs && sudo systemctl restart uta-api.service
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 735ms
+[sudo] password for soc:
+[soc@localhost api-server]$ cd /home/soc/uta
+bash npm-deploy.sh
+
+>>> Step 1/6 — patching package.json files for npm compatibility
+PATCHED_LIB:api-zod
+PATCHED_LIB:api-client-react
+PATCHED_ARTIFACT:api-server
+PATCHED_ARTIFACT:soc-dashboard
+
+>>> Step 2/6 — installing lib/api-zod
+
+found 0 vulnerabilities
+
+>>> Step 3/6 — installing lib/api-client-react
+
+found 0 vulnerabilities
+
+>>> Step 4/6 — building API server
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 911ms
+
+>>> Step 5/6 — building dashboard
+vite v7.3.1 building client environment for production...
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+✓ 2582 modules transformed.
+dist/public/index.html                   0.73 kB │ gzip:   0.41 kB
+dist/public/assets/index-kPZ8S6WB.css  124.13 kB │ gzip:  18.95 kB
+dist/public/assets/index-BinkSfLI.js   722.36 kB │ gzip: 209.25 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 12.41s
+
+>>> Step 6/6 — done!
+
+  API server : /home/soc/uta/artifacts/api-server/dist/index.mjs
+  Dashboard  : /home/soc/uta/artifacts/soc-dashboard/dist/public/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Start the API server with PM2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  npm install -g pm2
+
+  SOC_DATA_FILE=/home/soc/uta/artifacts/soc-auth-data.json \
+  PORT=8080 \
+  pm2 start node --name uta-api \
+    -- --enable-source-maps /home/soc/uta/artifacts/api-server/dist/index.mjs
+
+  pm2 save && pm2 startup
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Configure Apache httpd
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo cp /home/soc/uta/deploy/uta.conf /etc/httpd/conf.d/uta.conf
+  sudo sed -i "s|/srv/uta|/home/soc/uta|g" /etc/httpd/conf.d/uta.conf
+  sudo setsebool -P httpd_can_network_connect 1
+  sudo firewall-cmd --permanent --add-service=http && sudo firewall-cmd --reload
+  sudo systemctl enable --now httpd
+
+
+Restoring original package.json files...
+[soc@localhost uta]$ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+curl -s "http://localhost:8080/api/threatintel/status" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(s['name'],'-',s['status']) for s in d['sources']]"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/usr/lib64/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/usr/lib64/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/usr/lib64/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/lib64/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+[soc@localhost uta]$ git remote add github https://github.com/rekarsf/unified-threat-alert.git
+git push github main
+remote: Invalid username or token. Password authentication is not supported for Git operations.
+fatal: Authentication failed for 'https://github.com/rekarsf/unified-threat-alert.git/'
+[soc@localhost uta]$ python3 << 'PYEOF'
+import re, pathlib
+
+# ─── 1. threatintel.ts — add SOURCE_REGISTRY + /status + /test endpoints ───
+ts = pathlib.Path("/home/soc/uta/artifacts/api-server/src/routes/threatintel.ts")
+content = ts.read_text()
+
+old_map = '''const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+};'''
+
+new_map = '''const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+  greynoise:  "greynoiseApiKey",
+  censys:     "censysApiId",
+};
+
+interface SourceMeta {
+  id: string; name: string; category: string; keyRequired: boolean; docsUrl: string;
+  testUrl?: string; testHeaders?: (key: string) => Record<string, string>;
+}
+
+const SOURCE_REGISTRY: SourceMeta[] = [
+  { id: "hackernews",    name: "Hacker News",       category: "Community",     keyRequired: false, docsUrl: "https://hn.algoPYEOF("threatintel.ts: saved")ints: already present")ts)p_${resp.status}`),);y}`;testedAt: new Date().toISOString() }); retu
+SETTINGS_KEY_MAP + SOURCE_REGISTRY: patched
+status + test endpoints: patched
+threatintel.ts: saved
+[soc@localhost uta]$ cd /home/soc/uta/artifacts/api-server
+node ./build.mjs && sudo systemctl restart uta-api.service && sleep 3
+✘ [ERROR] Expected "}" but found "k"
+
+    src/routes/threatintel.ts:49:241:
+      49 │ ...Url: "https://otx.alienvault.com/api/v1/user/me",               testHeaders: lambda k: {"X-OTX-API-KEY": k} },
+         │                                                                                        ^
+         ╵                                                                                        }
+
+1 error
+Error: Build failed with 1 error:
+src/routes/threatintel.ts:49:241: ERROR: Expected "}" but found "k"
+    at failureErrorWithLog (/home/soc/uta/artifacts/api-server/node_modules/esbuild/lib/main.js:1748:15)
+    at /home/soc/uta/artifacts/api-server/node_modules/esbuild/lib/main.js:1207:25
+    at /home/soc/uta/artifacts/api-server/node_modules/esbuild/lib/main.js:1626:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+[soc@localhost api-server]$ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+curl -s "http://localhost:8080/api/threatintel/status" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+for s in d['sources']:
+    print(f\"{s['name']:<22} {s['category']:<14} {s['status']}\")
+"
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/lib64/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/usr/lib64/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/usr/lib64/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/lib64/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+[soc@localhost api-server]$ cd /home/soc/uta && bash npm-deploy.sh
+
+>>> Step 1/6 — patching package.json files for npm compatibility
+PATCHED_LIB:api-zod
+PATCHED_LIB:api-client-react
+PATCHED_ARTIFACT:api-server
+PATCHED_ARTIFACT:soc-dashboard
+
+>>> Step 2/6 — installing lib/api-zod
+
+found 0 vulnerabilities
+
+>>> Step 3/6 — installing lib/api-client-react
+
+found 0 vulnerabilities
+
+>>> Step 4/6 — building API server
+✘ [ERROR] Expected "}" but found "k"
+
+    src/routes/threatintel.ts:49:241:
+      49 │ ...Url: "https://otx.alienvault.com/api/v1/user/me",               testHeaders: lambda k: {"X-OTX-API-KEY": k} },
+         │                                                                                        ^
+         ╵                                                                                        }
+
+1 error
+Error: Build failed with 1 error:
+src/routes/threatintel.ts:49:241: ERROR: Expected "}" but found "k"
+    at failureErrorWithLog (/home/soc/uta/artifacts/api-server/node_modules/esbuild/lib/main.js:1748:15)
+    at /home/soc/uta/artifacts/api-server/node_modules/esbuild/lib/main.js:1207:25
+    at /home/soc/uta/artifacts/api-server/node_modules/esbuild/lib/main.js:1626:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+
+Restoring original package.json files...
+[soc@localhost uta]$
