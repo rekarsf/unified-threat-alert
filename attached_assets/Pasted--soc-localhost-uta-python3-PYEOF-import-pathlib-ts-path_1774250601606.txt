@@ -1,0 +1,109 @@
+[soc@localhost uta]$ python3 << 'PYEOF'
+import pathlib
+
+ts = pathlib.Path("/home/soc/uta/artifacts/api-server/src/routes/threatintel.ts")
+content = ts.read_text()
+
+# Remove the corrupted SOURCE_REGISTRY block (lines with lambda)
+import re
+# Strip everything from the bad SourceMeta interface down to the last good line before it
+pattern = r'\ninterface SourceMeta \{.*?\nconst SOURCE_REGISTRY.*?\];'
+content = re.sub(pattern, '', content, flags=re.DOTALL)
+
+# Also revert the SETTINGS_KEY_MAP if greynoise/censys were added with the bad block
+old_map_extended = '''const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+  greynoise:  "greynoiseApiKey",
+  censys:     "censysApiId",
+};'''
+old_map_original = '''const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+};'''
+
+if old_map_extended in content:
+PYEOF("Line count:", len(content.splitlines())) old_map_original)
+Corrupted block removed
+Line count: 565
+[soc@localhost uta]$ python3 << 'PYEOF'
+import pathlib
+
+ts = pathlib.Path("/home/soc/uta/artifacts/api-server/src/routes/threatintel.ts")
+content = ts.read_text()
+
+# 1 — Extend SETTINGS_KEY_MAP
+old_map = '''const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+};'''
+
+new_map = '''const SETTINGS_KEY_MAP: Record<string, string> = {
+  otx:        "otxApiKey",
+  virustotal: "vtApiKey",
+  shodan:     "shodanApiKey",
+  abuseipdb:  "abuseipdbApiKey",
+  greynoise:  "greynoiseApiKey",
+  censys:     "censysApiId",
+};
+
+interface SourceMeta {
+  id: string; name: string; category: string; keyRequired: boolean; docsUrl: string;
+  testUrl?: string; testHeaders?: (key: string) => Record<string, string>;
+}
+
+const SOURCE_REGISTRY: SourceMeta[] = [
+  { id: "hackernews",    name: "Hacker News",      category: "Community",     keyRequired: false, docsUrl: "https://hn.algolPYEOF("Done. Lines:", len(content.splitlines()))ent")", new_endpoints)s}`),);y}`;new Date().toISOString() });https://search.
+SETTINGS_KEY_MAP + SOURCE_REGISTRY: patched
+status + test endpoints: already present
+Done. Lines: 592
+[soc@localhost uta]$ cd /home/soc/uta/artifacts/api-server
+node ./build.mjs && sudo systemctl restart uta-api.service && sleep 3
+
+  dist/index.mjs                       1.8mb ⚠️
+  dist/pino-worker.mjs               150.5kb
+  dist/pino-file.mjs                 139.5kb
+  dist/pino-pretty.mjs               111.0kb
+  dist/thread-stream-worker.mjs        7.0kb
+  dist/index.mjs.map                   3.0mb
+  dist/pino-worker.mjs.map           255.4kb
+  dist/pino-file.mjs.map             227.8kb
+  dist/pino-pretty.mjs.map           202.0kb
+  dist/thread-stream-worker.mjs.map   11.9kb
+
+⚡ Done in 584ms
+[sudo] password for soc:
+[soc@localhost api-server]$ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+curl -s "http://localhost:8080/api/threatintel/status" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+for s in d['sources']:
+    print(f\"{s['name']:<22} {s['category']:<14} {s['status']}\")
+"
+Hacker News            Community      available
+CISA KEV               Vulnerability  available
+NVD CVE                Vulnerability  available
+ThreatFox              IOC            available
+URLHaus                IOC            available
+Malware Bazaar         Malware        available
+CIRCL CVE              Vulnerability  available
+Reddit Security        Community      available
+Feodo Tracker          IOC            available
+GitHub Advisories      Vulnerability  available
+EPSS Scores            Vulnerability  available
+OTX AlienVault         Threat Intel   no-key
+VirusTotal             Malware        no-key
+Shodan                 Exposure       no-key
+AbuseIPDB              Reputation     no-key
+GreyNoise              Reputation     no-key
+Censys                 Exposure       no-key
+[soc@localhost api-server]$
