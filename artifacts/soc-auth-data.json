@@ -27,12 +27,20 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-23T08:37:24.111Z",
+      "lastLogin": "2026-03-23T08:44:46.106Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "eacc2755-419a-4bfb-8365-16eb87cd531d",
+      "timestamp": "2026-03-23T08:44:46.107Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::ffff:127.0.0.1"
+    },
     {
       "id": "dc11c1bb-2e52-402d-9207-9678d0c6ef04",
       "timestamp": "2026-03-23T08:37:24.112Z",
