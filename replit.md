@@ -11,7 +11,7 @@ A vendor-agnostic, full-stack SOC (Security Operations Center) console. Admins c
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Build**: esbuild (for api-server)
+- **Build**: esbuild (for api-server), Vite (for dashboard)
 - **Frontend**: React + Vite + Tailwind CSS
 - **State**: Zustand (auth + app state)
 - **Data fetching**: TanStack React Query (via generated Orval hooks)
@@ -25,7 +25,7 @@ A vendor-agnostic, full-stack SOC (Security Operations Center) console. Admins c
 │   ├── api-server/         # Express backend (port 8080, proxied at /api)
 │   │   └── src/
 │   │       ├── routes/     # auth, s1, lr, admin, threatintel routes
-│   │       └── lib/        # auth (JWT/PBKDF2), mockData, middleware
+│   │       └── lib/        # auth (JWT/PBKDF2), middleware
 │   └── soc-dashboard/      # React frontend (port $PORT, preview at /)
 │       └── src/
 │           ├── pages/      # All page components
@@ -65,6 +65,7 @@ A vendor-agnostic, full-stack SOC (Security Operations Center) console. Admins c
 | Route | Component | Description |
 |-------|-----------|-------------|
 | `/login` | Login | JWT login form |
+| `/overview` | OverviewPage | **Default landing page** — world map + solutions/TI feed connection status |
 | `/s1` | S1Dashboard | SentinelOne dashboard + world map + live alerts |
 | `/assets/endpoints` | EndpointsPage | All endpoint table |
 | `/assets/servers` | ServersPage | Server endpoints |
@@ -117,12 +118,20 @@ All under `/api/` prefix:
 - Font: monospace for data readouts, display font for headings
 - Key classes: `cyber-glow`, `cyber-glow-destructive`, `font-mono`, `font-display`
 
-## Mock Data
+## Data Behavior (No Mock Data)
 
-When no real API credentials are configured, the backend returns realistic mock data:
-- 20 endpoints with geo-coordinates across the globe
-- Active threats, alerts, IOCs
-- LR alarms, cases, log sources, hosts, networks, entities, agents, lists
+All mock data has been removed. When credentials are not configured:
+- S1/LR routes return `{ data: [], error: "not_configured" }` — empty results with a clear status
+- TI feeds return `{ data: [], error: "upstream_unavailable" }` when upstream APIs are unreachable
+- The sidebar dynamically hides S1/LR sections when their credentials are missing
+- The Overview page shows connection status for all solutions and TI feeds
+
+## Dynamic Sidebar & Overview
+
+- **Overview page** (`/overview`) is the default landing page after login, showing the world map and connection status
+- **Sidebar sections** for SentinelOne (EDR) and LogRhythm (SIEM) only appear when credentials are configured in Settings
+- **Connection status API**: `GET /api/admin/connection-status` returns which solutions and TI feeds are configured
+- **TI Ingestion Period**: Configurable in Settings (24h/3d/7d/14d/30d) — all TI feeds filter results by this date window
 
 ## Cross-Platform Support (Windows + Linux)
 

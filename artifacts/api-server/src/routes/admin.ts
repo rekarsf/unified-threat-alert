@@ -323,6 +323,36 @@ router.delete("/roles/:roleId", requireScope("admin.roles"), (req: Authenticated
   res.json({ success: true, message: `Role ${removed.name} deleted` });
 });
 
+router.get("/connection-status", (req, res) => {
+  const data = getAuthData();
+  const s = (data.settings ?? {}) as Record<string, string>;
+  const tiKeys = (data.threatintelKeys ?? {}) as Record<string, string>;
+
+  const solutions: { id: string; name: string; category: string; configured: boolean; icon: string }[] = [
+    { id: "s1", name: "SentinelOne", category: "edr", configured: !!(s.s1BaseUrl && s.s1ApiToken), icon: "shield" },
+    { id: "lr", name: "LogRhythm", category: "siem", configured: !!(s.lrBaseUrl && s.lrApiToken), icon: "database" },
+  ];
+
+  const tiFeeds: { id: string; name: string; configured: boolean; requiresKey: boolean }[] = [
+    { id: "cisa-kev", name: "CISA KEV", configured: true, requiresKey: false },
+    { id: "nvd", name: "NVD CVEs", configured: true, requiresKey: false },
+    { id: "threatfox", name: "ThreatFox", configured: true, requiresKey: false },
+    { id: "urlhaus", name: "URLHaus", configured: true, requiresKey: false },
+    { id: "malwarebazaar", name: "Malware Bazaar", configured: true, requiresKey: false },
+    { id: "circl", name: "CIRCL CVE", configured: true, requiresKey: false },
+    { id: "feodo", name: "Feodo Tracker", configured: true, requiresKey: false },
+    { id: "ghsa", name: "GitHub GHSA", configured: true, requiresKey: false },
+    { id: "reddit", name: "Reddit Security", configured: true, requiresKey: false },
+    { id: "epss", name: "EPSS", configured: true, requiresKey: false },
+    { id: "shodan", name: "Shodan", configured: !!(tiKeys.shodan || s.shodanApiKey || process.env.SHODAN_API_KEY), requiresKey: true },
+    { id: "virustotal", name: "VirusTotal", configured: !!(tiKeys.virustotal || s.vtApiKey || process.env.VIRUSTOTAL_API_KEY), requiresKey: true },
+    { id: "abuseipdb", name: "AbuseIPDB", configured: !!(tiKeys.abuseipdb || s.abuseipdbApiKey || process.env.ABUSEIPDB_API_KEY), requiresKey: true },
+    { id: "otx", name: "AlienVault OTX", configured: !!(tiKeys.otx || s.otxApiKey || process.env.OTX_API_KEY), requiresKey: true },
+  ];
+
+  res.json({ solutions, tiFeeds });
+});
+
 const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
   admin: "Full access to all systems and administration",
   analyst: "Read and investigate across EDR, SIEM, and Threat Intel",

@@ -147,42 +147,46 @@ function SidebarGroup({ group, sidebarOpen, location }: { group: NavGroup; sideb
   );
 }
 
-function useVendorNames() {
+function useConnectionStatus() {
   const { token } = useAuthStore();
   const { data } = useQuery({
-    queryKey: ['/api/admin/vendors'],
+    queryKey: ['/api/admin/connection-status'],
     queryFn: async () => {
-      const r = await fetch('/api/admin/vendors', {
+      const r = await fetch('/api/admin/connection-status', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!r.ok) return { vendors: [] };
+      if (!r.ok) return { solutions: [] };
       return r.json();
     },
-    staleTime: 60_000,
+    staleTime: 30_000,
     enabled: !!token,
   });
-  const vendors: { category: string; displayName: string; enabled: boolean }[] = data?.vendors || [];
-  const first = (cat: string) => vendors.find(v => v.category === cat && v.enabled)?.displayName ?? null;
+  const solutions: { id: string; name: string; category: string; configured: boolean }[] = data?.solutions || [];
   return {
-    edrName: first('edr'),
-    xdrName: first('xdr'),
-    siemName: first('siem'),
-    soarName: first('soar'),
+    s1Configured: solutions.find(s => s.id === 's1')?.configured ?? false,
+    lrConfigured: solutions.find(s => s.id === 'lr')?.configured ?? false,
   };
 }
 
 export function Sidebar() {
   const [location] = useLocation();
   const { sidebarOpen } = useAppStore();
-  const { edrName, xdrName, siemName, soarName } = useVendorNames();
+  const { s1Configured, lrConfigured } = useConnectionStatus();
 
   const navGroups: NavGroup[] = [
-    ...(edrName ? [{
-      title: edrName,
+    {
+      title: "Overview",
+      icon: <Globe className="w-3.5 h-3.5" />,
+      items: [
+        { label: "Overview", path: "/overview", icon: <Activity className="w-4 h-4" /> },
+        { label: "Global Map", path: "/map", icon: <Globe className="w-4 h-4" /> },
+      ]
+    },
+    ...(s1Configured ? [{
+      title: "SentinelOne",
       icon: <Shield className="w-3.5 h-3.5" />,
       items: [
         { label: "Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
-        { label: "Global Map", path: "/map", icon: <Globe className="w-4 h-4" /> },
         { label: "Endpoints", path: "/assets/endpoints", icon: <Server className="w-4 h-4" /> },
         { label: "Servers", path: "/assets/servers", icon: <Server className="w-4 h-4" /> },
         { label: "Workstations", path: "/assets/workstations", icon: <Monitor className="w-4 h-4" /> },
@@ -190,14 +194,7 @@ export function Sidebar() {
         { label: "Rogues", path: "/assets/rogues", icon: <Laptop className="w-4 h-4" /> },
       ]
     }] : []),
-    ...(xdrName ? [{
-      title: xdrName,
-      icon: <Zap className="w-3.5 h-3.5" />,
-      items: [
-        { label: "Dashboard", path: "/s1", icon: <Activity className="w-4 h-4" /> },
-      ]
-    }] : []),
-    {
+    ...(s1Configured ? [{
       title: "Alerts",
       icon: <AlertTriangle className="w-3.5 h-3.5" />,
       items: [
@@ -206,9 +203,9 @@ export function Sidebar() {
         { label: "History", path: "/alerts/history", icon: <FileText className="w-4 h-4" /> },
         { label: "Threat IOCs", path: "/iocs", icon: <Crosshair className="w-4 h-4" /> },
       ]
-    },
-    ...(siemName ? [{
-      title: siemName,
+    }] : []),
+    ...(lrConfigured ? [{
+      title: "LogRhythm",
       icon: <Database className="w-3.5 h-3.5" />,
       items: [
         { label: "Dashboard", path: "/lr", icon: <Activity className="w-4 h-4" /> },
@@ -221,13 +218,6 @@ export function Sidebar() {
         { label: "Hosts", path: "/lr/hosts", icon: <Server className="w-4 h-4" /> },
         { label: "Networks", path: "/lr/networks", icon: <Network className="w-4 h-4" /> },
         { label: "Agents", path: "/lr/agents", icon: <Shield className="w-4 h-4" /> },
-      ]
-    }] : []),
-    ...(soarName ? [{
-      title: soarName,
-      icon: <Settings className="w-3.5 h-3.5" />,
-      items: [
-        { label: "Playbooks", path: "/lr/cases", icon: <FileText className="w-4 h-4" /> },
       ]
     }] : []),
     {

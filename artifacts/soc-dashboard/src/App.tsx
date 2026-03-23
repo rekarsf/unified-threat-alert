@@ -20,6 +20,7 @@ import ThreatIntelPage from "./pages/threatintel";
 import AdminPage from "./pages/admin";
 import SettingsPage from "./pages/settings";
 import MapFullscreenPage from "./pages/map-fullscreen";
+import OverviewPage from "./pages/overview";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -133,8 +134,7 @@ function HomeRedirect() {
     if (!isAuthenticated) {
       setLocation('/login');
     } else {
-      const last = localStorage.getItem('soc_last_dashboard') || '/s1';
-      setLocation(last);
+      setLocation('/overview');
     }
   }, [isAuthenticated, setLocation]);
 
@@ -146,6 +146,9 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/" component={HomeRedirect} />
+      
+      {/* Overview */}
+      <Route path="/overview"><ProtectedRoute component={OverviewPage} /></Route>
       
       {/* SentinelOne */}
       <Route path="/s1"><ProtectedRoute component={S1Dashboard} /></Route>
