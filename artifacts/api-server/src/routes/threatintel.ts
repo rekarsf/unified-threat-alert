@@ -171,19 +171,21 @@ router.get("/threatfox", async (req, res) => {
 // ─── URLHaus ────────────────────────────────────────────────────────────────
 router.get("/urlhaus", async (req, res) => {
   const period = parseInt((req.query.period as string) || "7", 10);
-  const limit = period <= 1 ? 30 : period <= 7 ? 50 : 100;
+  const cutoff = new Date(Date.now() - period * 86400000);
+  const fetchLimit = period <= 1 ? 50 : period <= 7 ? 100 : 300;
   const resp = await safeFetch("https://urlhaus-api.abuse.ch/v1/urls/recent/", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `limit=${limit}`,
+    body: `limit=${fetchLimit}`,
   });
   if (resp?.ok) {
     const data = await resp.json() as any;
-    const items = (data.urls ?? []).map((u: any) => ({
+    const all = (data.urls ?? []).map((u: any) => ({
       id: u.id, url: u.url, status: u.url_status, host: u.host,
       dateAdded: u.date_added, tags: u.tags ?? [], threat: u.threat,
     }));
-    res.json({ data: items, source: "urlhaus", total: items.length, period });
+    const items = all.filter((u: any) => u.dateAdded && new Date(u.dateAdded) >= cutoff);
+    res.json({ data: items.length > 0 ? items : all.slice(0, 50), source: "urlhaus", total: items.length, period });
     return;
   }
   res.json({ data: [], source: "urlhaus", total: 0, error: "upstream_unavailable" });
@@ -192,7 +194,8 @@ router.get("/urlhaus", async (req, res) => {
 // ─── Malware Bazaar ─────────────────────────────────────────────────────────
 router.get("/malwarebazaar", async (req, res) => {
   const period = parseInt((req.query.period as string) || "7", 10);
-  const selector = period <= 1 ? 50 : period <= 7 ? 100 : 200;
+  const cutoff = new Date(Date.now() - period * 86400000);
+  const selector = period <= 1 ? 50 : period <= 7 ? 100 : 300;
   const resp = await safeFetch("https://mb-api.abuse.ch/api/v1/", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -200,7 +203,7 @@ router.get("/malwarebazaar", async (req, res) => {
   });
   if (resp?.ok) {
     const data = await resp.json() as any;
-    const items = (data.data ?? []).slice(0, 100).map((m: any) => ({
+    const all = (data.data ?? []).map((m: any) => ({
       id: m.sha256_hash,
       sha256: m.sha256_hash,
       md5: m.md5_hash,
@@ -214,7 +217,8 @@ router.get("/malwarebazaar", async (req, res) => {
       lastSeen: m.last_seen,
       reporter: m.reporter,
     }));
-    res.json({ data: items, source: "malwarebazaar", total: items.length, period });
+    const items = all.filter((m: any) => m.firstSeen && new Date(m.firstSeen) >= cutoff);
+    res.json({ data: items.length > 0 ? items : all.slice(0, 50), source: "malwarebazaar", total: items.length, period });
     return;
   }
   res.json({ data: [], source: "malwarebazaar", total: 0, error: "upstream_unavailable" });
@@ -223,11 +227,12 @@ router.get("/malwarebazaar", async (req, res) => {
 // ─── CIRCL CVE ──────────────────────────────────────────────────────────────
 router.get("/circl", async (req, res) => {
   const period = parseInt((req.query.period as string) || "7", 10);
-  const count = period <= 1 ? 20 : period <= 7 ? 30 : period <= 14 ? 50 : 100;
-  const resp = await safeFetch(`https://cve.circl.lu/api/last/${count}`, {}, 10000);
+  const cutoff = new Date(Date.now() - period * 86400000);
+  const fetchCount = period <= 1 ? 50 : period <= 7 ? 100 : period <= 14 ? 150 : 200;
+  const resp = await safeFetch(`https://cve.circl.lu/api/last/${fetchCount}`, {}, 10000);
   if (resp?.ok) {
     const raw = await resp.json() as any[];
-    const items = raw.slice(0, count).map((c: any) => ({
+    const mapped = raw.map((c: any) => ({
       id: c.id || c.CVE_data_meta?.ID,
       cveId: c.id || c.CVE_data_meta?.ID,
       description: c.summary || c.description?.description_data?.[0]?.value || "",
@@ -238,7 +243,8 @@ router.get("/circl", async (req, res) => {
       cwe: c.cwe,
       references: (c.references || []).slice(0, 3),
     }));
-    res.json({ data: items, source: "circl", total: items.length, period });
+    const items = mapped.filter((c: any) => c.published && new Date(c.published) >= cutoff);
+    res.json({ data: items.length > 0 ? items : mapped.slice(0, 50), source: "circl", total: items.length, period });
     return;
   }
   res.json({ data: [], source: "circl", total: 0, error: "upstream_unavailable" });
@@ -247,8 +253,9 @@ router.get("/circl", async (req, res) => {
 // ─── Reddit Security ────────────────────────────────────────────────────────
 router.get("/reddit", async (req, res) => {
   const period = parseInt((req.query.period as string) || "7", 10);
+  const cutoff = new Date(Date.now() - period * 86400000);
   const timeFilter = period <= 1 ? "day" : period <= 7 ? "week" : "month";
-  const limit = period <= 1 ? 20 : period <= 7 ? 30 : 50;
+  const limit = period <= 1 ? 30 : period <= 7 ? 50 : 100;
   const subs = "netsec+cybersecurity+blueteamsec+Malware+netsecstudents";
   const resp = await safeFetch(`https://www.reddit.com/r/${subs}/top.json?t=${timeFilter}&limit=${limit}`, {
     headers: { "User-Agent": "UnifiedThreatAlert/1.0" },
@@ -256,7 +263,7 @@ router.get("/reddit", async (req, res) => {
   if (resp?.ok) {
     const raw = await resp.json() as any;
     const posts = (raw.data?.children || []).map((c: any) => c.data);
-    const items = posts.map((p: any) => ({
+    const all = posts.map((p: any) => ({
       id: p.id,
       title: p.title,
       url: p.url,
@@ -268,7 +275,8 @@ router.get("/reddit", async (req, res) => {
       selftext: (p.selftext || "").slice(0, 200),
       flair: p.link_flair_text,
     }));
-    res.json({ data: items, source: "reddit", total: items.length, period });
+    const items = all.filter((p: any) => new Date(p.created) >= cutoff);
+    res.json({ data: items.length > 0 ? items : all.slice(0, 30), source: "reddit", total: items.length, period });
     return;
   }
   res.json({ data: [], source: "reddit", total: 0, error: "upstream_unavailable" });
@@ -562,7 +570,8 @@ router.get("/feodo", async (req, res) => {
 router.get("/ghsa", async (req, res) => {
   const severity = (req.query.severity as string) || "";
   const period = parseInt((req.query.period as string) || "7", 10);
-  const perPage = period <= 1 ? 20 : period <= 7 ? 30 : 50;
+  const cutoff = new Date(Date.now() - period * 86400000);
+  const perPage = period <= 1 ? 30 : period <= 7 ? 50 : 100;
   let url = `https://api.github.com/advisories?per_page=${perPage}&type=reviewed&direction=desc&sort=published`;
   if (severity) url += `&severity=${severity}`;
   const resp = await safeFetch(url, {
@@ -570,7 +579,7 @@ router.get("/ghsa", async (req, res) => {
   }, 12000);
   if (resp?.ok) {
     const raw = await resp.json() as any[];
-    const items = (Array.isArray(raw) ? raw : []).map((a: any) => ({
+    const all = (Array.isArray(raw) ? raw : []).map((a: any) => ({
       id: a.ghsa_id,
       ghsaId: a.ghsa_id,
       cveId: a.cve_id,
@@ -586,7 +595,8 @@ router.get("/ghsa", async (req, res) => {
       references: (a.references || []).slice(0, 3),
       url: a.html_url,
     }));
-    res.json({ data: items, source: "ghsa", total: items.length, period });
+    const items = all.filter((a: any) => a.publishedAt && new Date(a.publishedAt) >= cutoff);
+    res.json({ data: items.length > 0 ? items : all.slice(0, 30), source: "ghsa", total: items.length, period });
     return;
   }
   res.json({ data: [], source: "ghsa", total: 0, error: "upstream_unavailable" });
