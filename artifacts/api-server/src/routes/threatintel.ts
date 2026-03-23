@@ -25,7 +25,35 @@ const SETTINGS_KEY_MAP: Record<string, string> = {
   virustotal: "vtApiKey",
   shodan:     "shodanApiKey",
   abuseipdb:  "abuseipdbApiKey",
+  greynoise:  "greynoiseApiKey",
+  censys:     "censysApiId",
 };
+
+// ─── Source registry ────────────────────────────────────────────────────────
+interface SourceMeta {
+  id: string; name: string; category: string; keyRequired: boolean; docsUrl: string;
+  testUrl?: string; testHeaders?: (key: string) => Record<string, string>;
+}
+
+const SOURCE_REGISTRY: SourceMeta[] = [
+  { id: "hackernews",    name: "Hacker News",       category: "Community",    keyRequired: false, docsUrl: "https://hn.algolia.com/api",              testUrl: "https://hn.algolia.com/api/v1/search?query=security&hitsPerPage=1" },
+  { id: "cisa-kev",      name: "CISA KEV",           category: "Vulnerability", keyRequired: false, docsUrl: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog", testUrl: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json" },
+  { id: "nvd",           name: "NVD CVE",            category: "Vulnerability", keyRequired: false, docsUrl: "https://nvd.nist.gov/developers/vulnerabilities", testUrl: "https://services.nvd.nist.gov/rest/json/cves/2.0?resultsPerPage=1" },
+  { id: "threatfox",     name: "ThreatFox",          category: "IOC",          keyRequired: false, docsUrl: "https://threatfox.abuse.ch",              testUrl: "https://threatfox-api.abuse.ch/api/v1/" },
+  { id: "urlhaus",       name: "URLHaus",            category: "IOC",          keyRequired: false, docsUrl: "https://urlhaus.abuse.ch",                testUrl: "https://urlhaus-api.abuse.ch/v1/urls/recent/" },
+  { id: "malwarebazaar", name: "Malware Bazaar",     category: "Malware",      keyRequired: false, docsUrl: "https://bazaar.abuse.ch",                 testUrl: "https://mb-api.abuse.ch/api/v1/" },
+  { id: "circl",         name: "CIRCL CVE",          category: "Vulnerability", keyRequired: false, docsUrl: "https://cve.circl.lu",                    testUrl: "https://cve.circl.lu/api/last/1" },
+  { id: "reddit",        name: "Reddit Security",    category: "Community",    keyRequired: false, docsUrl: "https://www.reddit.com/r/netsec",          testUrl: "https://www.reddit.com/r/netsec/top.json?limit=1&t=week" },
+  { id: "feodo",         name: "Feodo Tracker",      category: "IOC",          keyRequired: false, docsUrl: "https://feodotracker.abuse.ch",            testUrl: "https://feodotracker.abuse.ch/downloads/ipblocklist.json" },
+  { id: "ghsa",          name: "GitHub Advisories",  category: "Vulnerability", keyRequired: false, docsUrl: "https://github.com/advisories",           testUrl: "https://api.github.com/advisories?per_page=1" },
+  { id: "epss",          name: "EPSS Scores",        category: "Vulnerability", keyRequired: false, docsUrl: "https://www.first.org/epss",              testUrl: "https://api.first.org/data/v1/epss?limit=1" },
+  { id: "otx",           name: "OTX AlienVault",     category: "Threat Intel", keyRequired: true,  docsUrl: "https://otx.alienvault.com/api",          testUrl: "https://otx.alienvault.com/api/v1/user/me", testHeaders: (k) => ({ "X-OTX-API-KEY": k }) },
+  { id: "virustotal",    name: "VirusTotal",         category: "Malware",      keyRequired: true,  docsUrl: "https://developers.virustotal.com/reference", testUrl: "https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8", testHeaders: (k) => ({ "x-apikey": k }) },
+  { id: "shodan",        name: "Shodan",             category: "Exposure",     keyRequired: true,  docsUrl: "https://developer.shodan.io/api",         testUrl: "https://api.shodan.io/api-info?key=KEY", testHeaders: () => ({}) },
+  { id: "abuseipdb",     name: "AbuseIPDB",          category: "Reputation",   keyRequired: true,  docsUrl: "https://www.abuseipdb.com/api",           testUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=8.8.8.8&maxAgeInDays=7", testHeaders: (k) => ({ Key: k, Accept: "application/json" }) },
+  { id: "greynoise",     name: "GreyNoise",          category: "Reputation",   keyRequired: true,  docsUrl: "https://developer.greynoise.io",          testUrl: "https://api.greynoise.io/v3/community/8.8.8.8", testHeaders: (k) => ({ key: k }) },
+  { id: "censys",        name: "Censys",             category: "Exposure",     keyRequired: true,  docsUrl: "https://search.censys.io/api",            testUrl: "https://search.censys.io/api/v2/metadata", testHeaders: (k) => ({ Authorization: `Basic ${Buffer.from(k + ":").toString("base64")}` }) },
+];
 
 async function getApiKey(name: string): Promise<string | null> {
   try {
@@ -530,6 +558,62 @@ router.get("/keys", requireScope("admin.settings"), (_req, res) => {
     masked[k] = s.length > 8 ? s.slice(0, 4) + "••••" + s.slice(-4) : "••••••••";
   }
   res.json({ keys: masked, configured: Object.keys(keys) });
+});
+
+// ─── Connection status for all sources ───────────────────────────────────────
+router.get("/status", async (_req, res) => {
+  const results = await Promise.all(
+    SOURCE_REGISTRY.map(async (s) => {
+      const key = s.keyRequired ? await getApiKey(s.id) : null;
+      const hasKey = s.keyRequired ? !!key : true;
+      return {
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        keyRequired: s.keyRequired,
+        hasKey,
+        docsUrl: s.docsUrl,
+        status: s.keyRequired
+          ? (hasKey ? "configured" : "no-key")
+          : "available",
+      };
+    })
+  );
+  res.json({ sources: results, checkedAt: new Date().toISOString() });
+});
+
+// ─── Live connectivity test for a single source ───────────────────────────────
+router.post("/test/:sourceId", requireScope("admin.settings"), async (req, res) => {
+  const { sourceId } = req.params;
+  const meta = SOURCE_REGISTRY.find(s => s.id === sourceId);
+  if (!meta || !meta.testUrl) {
+    res.status(404).json({ error: "unknown_source" });
+    return;
+  }
+
+  let url = meta.testUrl;
+  const headers: Record<string, string> = { "User-Agent": "UnifiedThreatAlert/1.0" };
+
+  if (meta.keyRequired) {
+    const key = await getApiKey(sourceId);
+    if (!key) {
+      res.json({ source: sourceId, connected: false, reason: "no_key", testedAt: new Date().toISOString() });
+      return;
+    }
+    // Shodan embeds key in URL
+    if (sourceId === "shodan") url = `https://api.shodan.io/api-info?key=${key}`;
+    else if (meta.testHeaders) Object.assign(headers, meta.testHeaders(key));
+  }
+
+  const resp = await safeFetch(url, { method: "GET", headers }, 10000);
+  const connected = resp !== null && resp.status < 500;
+  res.json({
+    source: sourceId,
+    connected,
+    httpStatus: resp?.status ?? null,
+    reason: !resp ? "timeout" : (connected ? "ok" : `http_${resp.status}`),
+    testedAt: new Date().toISOString(),
+  });
 });
 
 export default router;

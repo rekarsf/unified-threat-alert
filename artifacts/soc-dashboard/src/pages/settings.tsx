@@ -422,6 +422,79 @@ const INTEGRATION_GROUPS: IntegrationGroup[] = [
       },
     ],
   },
+  {
+    title: 'Threat Intelligence APIs',
+    icon: <Globe className="w-4 h-4" />,
+    integrations: [
+      {
+        id: 'otx',
+        name: 'OTX AlienVault',
+        description: 'Community-driven threat intelligence — IOCs, pulses, and threat actors. Free tier available.',
+        icon: <Globe className="w-5 h-5" />,
+        color: 'text-purple-400',
+        fields: [
+          { key: 'otxApiKey', label: 'API Key', placeholder: 'OTX API key from otx.alienvault.com', type: 'password' },
+        ],
+        docsUrl: 'https://otx.alienvault.com/api',
+      },
+      {
+        id: 'virustotal',
+        name: 'VirusTotal',
+        description: 'Multi-engine malware scanning and file/URL/IP reputation. Free public API key available.',
+        icon: <Eye className="w-5 h-5" />,
+        color: 'text-green-400',
+        fields: [
+          { key: 'vtApiKey', label: 'API Key', placeholder: 'VirusTotal API key from virustotal.com', type: 'password' },
+        ],
+        docsUrl: 'https://developers.virustotal.com/reference',
+      },
+      {
+        id: 'shodan',
+        name: 'Shodan',
+        description: 'Internet-wide scanner for exposed services, banners, and vulnerabilities.',
+        icon: <Search className="w-5 h-5" />,
+        color: 'text-amber-400',
+        fields: [
+          { key: 'shodanApiKey', label: 'API Key', placeholder: 'Shodan API key from shodan.io', type: 'password' },
+        ],
+        docsUrl: 'https://developer.shodan.io/api',
+      },
+      {
+        id: 'abuseipdb',
+        name: 'AbuseIPDB',
+        description: 'Crowdsourced IP address abuse reporting and reputation database. Free tier available.',
+        icon: <Shield className="w-5 h-5" />,
+        color: 'text-red-400',
+        fields: [
+          { key: 'abuseipdbApiKey', label: 'API Key', placeholder: 'AbuseIPDB API key from abuseipdb.com', type: 'password' },
+        ],
+        docsUrl: 'https://www.abuseipdb.com/api',
+      },
+      {
+        id: 'greynoise',
+        name: 'GreyNoise',
+        description: 'Internet scanner noise classification — separate targeted attacks from mass scanning.',
+        icon: <Zap className="w-5 h-5" />,
+        color: 'text-cyan-400',
+        fields: [
+          { key: 'greynoiseApiKey', label: 'API Key', placeholder: 'GreyNoise community or enterprise key', type: 'password' },
+        ],
+        docsUrl: 'https://developer.greynoise.io',
+      },
+      {
+        id: 'censys',
+        name: 'Censys',
+        description: 'Attack surface management and internet-wide scanning. Free research tier available.',
+        icon: <Database className="w-5 h-5" />,
+        color: 'text-blue-400',
+        fields: [
+          { key: 'censysApiId', label: 'API ID', placeholder: 'Censys API ID from search.censys.io' },
+          { key: 'censysApiSecret', label: 'API Secret', placeholder: 'Censys API secret', type: 'password' },
+        ],
+        docsUrl: 'https://search.censys.io/api',
+      },
+    ],
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

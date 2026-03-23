@@ -5,7 +5,7 @@ import {
   Rss, Shield, AlertTriangle, ExternalLink, Clock, Search, RefreshCw,
   Bug, Link2, Package, Globe, Hash, ChevronRight, Activity, Eye,
   Database, Server, Info, Key, CheckCircle, XCircle, Zap, FileCode,
-  ThumbsUp, MessageCircle
+  ThumbsUp, MessageCircle, Wifi, WifiOff, Settings, Loader2
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 
@@ -180,35 +180,98 @@ const OVERVIEW_SOURCE_CONFIG: { id: string; label: string; icon: React.ReactNode
   { id: 'reddit',      label: 'Reddit',         icon: <MessageCircle className="w-3.5 h-3.5" />, color: 'border-orange-400/20 bg-orange-400/5' },
 ];
 
+// ── Source status icon ────────────────────────────────────────────────────────
+function StatusDot({ status, testing }: { status: string; testing?: boolean }) {
+  if (testing) return <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />;
+  if (status === 'available')    return <Wifi className="w-3.5 h-3.5 text-green-400" />;
+  if (status === 'configured')   return <CheckCircle className="w-3.5 h-3.5 text-green-400" />;
+  if (status === 'connected')    return <Wifi className="w-3.5 h-3.5 text-green-400" />;
+  if (status === 'no-key')       return <Key className="w-3.5 h-3.5 text-yellow-400" />;
+  if (status === 'offline')      return <WifiOff className="w-3.5 h-3.5 text-red-400" />;
+  if (status === 'error')        return <XCircle className="w-3.5 h-3.5 text-red-400" />;
+  return <div className="w-3.5 h-3.5 rounded-full bg-muted-foreground/40" />;
+}
+
+function statusLabel(status: string) {
+  if (status === 'available')  return { text: 'Direct', cls: 'text-green-400' };
+  if (status === 'configured') return { text: 'Configured', cls: 'text-green-400' };
+  if (status === 'connected')  return { text: 'Connected', cls: 'text-green-400' };
+  if (status === 'no-key')     return { text: 'API Key Required', cls: 'text-yellow-400' };
+  if (status === 'offline')    return { text: 'Offline', cls: 'text-red-400' };
+  if (status === 'error')      return { text: 'Error', cls: 'text-red-400' };
+  return { text: 'Unknown', cls: 'text-muted-foreground' };
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Community':    'border-orange-500/20 bg-orange-500/5',
+  'Vulnerability':'border-red-500/20 bg-red-500/5',
+  'IOC':          'border-yellow-500/20 bg-yellow-500/5',
+  'Malware':      'border-pink-500/20 bg-pink-500/5',
+  'Threat Intel': 'border-purple-500/20 bg-purple-500/5',
+  'Reputation':   'border-cyan-500/20 bg-cyan-500/5',
+  'Exposure':     'border-amber-500/20 bg-amber-500/5',
+};
+
+interface SourceStatus {
+  id: string; name: string; category: string; keyRequired: boolean;
+  hasKey: boolean; docsUrl: string; status: string; testResult?: string; testing?: boolean;
+}
+
 function OverviewTab({ onNavigate }: { onNavigate: (src: Source) => void }) {
   const { token } = useAuthStore();
+  const [testResults, setTestResults] = useState<Record<string, { status: string; tested: boolean }>>({});
+  const [testing, setTesting] = useState<Record<string, boolean>>({});
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [`${BASE}/api/threatintel/overview`],
+    queryKey: [`${BASE}/api/threatintel/status`],
     queryFn: async () => {
-      const r = await fetch(`${BASE}/api/threatintel/overview`, { headers: { Authorization: `Bearer ${token}` } });
-      return r.json();
+      const r = await fetch(`${BASE}/api/threatintel/status`, { headers: { Authorization: `Bearer ${token}` } });
+      return r.json() as Promise<{ sources: SourceStatus[]; checkedAt: string }>;
     },
-    staleTime: 120_000,
+    staleTime: 60_000,
   });
 
-  const sources = data?.sources || {};
+  const sources: SourceStatus[] = data?.sources || [];
 
-  const stats = [
-    { label: 'CISA KEV', value: sources['cisa-kev']?.count ?? '—', color: 'text-red-400', ok: sources['cisa-kev']?.ok },
-    { label: 'ThreatFox', value: sources['threatfox']?.count ?? '—', color: 'text-red-300', ok: sources['threatfox']?.ok },
-    { label: 'URLHaus', value: sources['urlhaus']?.count ?? '—', color: 'text-yellow-400', ok: sources['urlhaus']?.ok },
-    { label: 'Malware Bazaar', value: sources['malwarebazaar']?.count ?? '—', color: 'text-pink-400', ok: sources['malwarebazaar']?.ok },
-    { label: 'Hacker News', value: sources['hackernews']?.count ?? '—', color: 'text-orange-400', ok: sources['hackernews']?.ok },
-    { label: 'Reddit', value: sources['reddit']?.count ?? '—', color: 'text-orange-500', ok: sources['reddit']?.ok },
-  ];
+  const testSource = async (id: string) => {
+    setTesting(p => ({ ...p, [id]: true }));
+    try {
+      const r = await fetch(`${BASE}/api/threatintel/test/${id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await r.json();
+      setTestResults(p => ({
+        ...p,
+        [id]: { status: result.connected ? 'connected' : (result.reason === 'no_key' ? 'no-key' : 'offline'), tested: true },
+      }));
+    } catch {
+      setTestResults(p => ({ ...p, [id]: { status: 'error', tested: true } }));
+    } finally {
+      setTesting(p => ({ ...p, [id]: false }));
+    }
+  };
+
+  const freeCount  = sources.filter(s => !s.keyRequired).length;
+  const keyedTotal = sources.filter(s => s.keyRequired).length;
+  const keyedDone  = sources.filter(s => s.keyRequired && s.hasKey).length;
+
+  const grouped = sources.reduce<Record<string, SourceStatus[]>>((acc, s) => {
+    (acc[s.category] ||= []).push(s);
+    return acc;
+  }, {});
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar">
       {/* Header */}
       <div className="border-b border-border bg-card/40 px-5 py-3 flex items-center justify-between">
         <div>
-          <h2 className="font-mono text-sm font-bold text-foreground">Threat Intelligence Overview</h2>
-          {data?.timestamp && <p className="text-[10px] text-muted-foreground font-mono mt-0.5">Last updated: {format(new Date(data.timestamp), 'HH:mm:ss')}</p>}
+          <h2 className="font-mono text-sm font-bold text-foreground">Threat Intelligence Connections</h2>
+          {data?.checkedAt && (
+            <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+              Checked: {format(new Date(data.checkedAt), 'HH:mm:ss')}
+            </p>
+          )}
         </div>
         <button onClick={() => refetch()} disabled={isLoading}
           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
@@ -218,78 +281,118 @@ function OverviewTab({ onNavigate }: { onNavigate: (src: Source) => void }) {
 
       {isLoading ? <LoadingRow /> : (
         <div className="p-5 space-y-6">
-          {/* Status pills */}
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {stats.map(s => (
-              <div key={s.label} className="bg-card/60 border border-border rounded-lg p-3 text-center">
-                <div className={`text-xl font-mono font-bold ${s.color}`}>{s.value}</div>
-                <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{s.label}</div>
-                <div className={`w-1.5 h-1.5 rounded-full mx-auto mt-1.5 ${s.ok ? 'bg-green-400' : 'bg-red-400'}`} />
-              </div>
-            ))}
-          </div>
-
-          {/* Feed columns */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {OVERVIEW_SOURCE_CONFIG.map(cfg => {
-              const src = sources[cfg.id];
-              const items: any[] = src?.items || [];
-              return (
-                <div key={cfg.id} className={`rounded-xl border ${cfg.color} overflow-hidden`}>
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50">
-                    <div className="flex items-center gap-2 text-sm font-mono font-bold text-foreground">
-                      {cfg.icon} {cfg.label}
-                    </div>
-                    <button onClick={() => onNavigate(cfg.id as Source)}
-                      className="text-[10px] font-mono text-muted-foreground hover:text-primary flex items-center gap-0.5 transition-colors">
-                      View all <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="divide-y divide-border/40">
-                    {items.length === 0 ? (
-                      <div className="px-4 py-6 text-center text-xs text-muted-foreground font-mono">No data</div>
-                    ) : items.map((item: any, i: number) => (
-                      <a key={i} href={item.url} target="_blank" rel="noopener noreferrer"
-                        className="block px-4 py-2.5 hover:bg-white/[0.02] transition-colors group">
-                        <div className="flex items-start gap-2">
-                          <SevBadge sev={item.severity} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-mono text-foreground line-clamp-2 group-hover:text-primary transition-colors">{item.title}</p>
-                            {item.subtitle && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{item.subtitle}</p>}
-                            {item.date && (
-                              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                {formatDistanceToNow(new Date(item.date), { addSuffix: true })}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* API-key sources status */}
-          <div>
-            <p className="text-xs font-mono text-muted-foreground mb-3 uppercase tracking-wider">API-Key Sources</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {(['otx','virustotal','shodan','abuseipdb'] as Source[]).map(id => {
-                const tab = TABS.find(t => t.id === id);
-                return (
-                  <button key={id} onClick={() => onNavigate(id)}
-                    className="bg-card/60 border border-border rounded-lg p-3 flex items-center gap-3 hover:border-primary/30 transition-colors text-left">
-                    <div className={`${tab?.color}`}>{tab?.icon}</div>
-                    <div>
-                      <p className="text-xs font-mono font-bold text-foreground">{tab?.label}</p>
-                      <p className="text-[10px] text-yellow-400 font-mono flex items-center gap-1 mt-0.5"><Key className="w-2.5 h-2.5" /> Key required</p>
-                    </div>
-                  </button>
-                );
-              })}
+          {/* Summary bar */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-card/60 border border-green-500/20 rounded-lg px-4 py-3 text-center">
+              <div className="text-2xl font-mono font-bold text-green-400">{freeCount}</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-0.5">Direct Feeds</div>
+              <div className="text-[10px] text-green-400/70 mt-0.5">No API key needed</div>
+            </div>
+            <div className="bg-card/60 border border-yellow-500/20 rounded-lg px-4 py-3 text-center">
+              <div className="text-2xl font-mono font-bold text-yellow-400">{keyedDone}/{keyedTotal}</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-0.5">API Sources</div>
+              <div className="text-[10px] text-yellow-400/70 mt-0.5">Keys configured</div>
+            </div>
+            <div className="bg-card/60 border border-primary/20 rounded-lg px-4 py-3 text-center">
+              <div className="text-2xl font-mono font-bold text-primary">{sources.length}</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-0.5">Total Sources</div>
+              <div className="text-[10px] text-muted-foreground/50 mt-0.5">Registered</div>
             </div>
           </div>
+
+          {/* Per-category source cards */}
+          {Object.entries(grouped).map(([cat, catSources]) => (
+            <div key={cat}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{cat}</span>
+                <div className="flex-1 border-t border-border/40" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                {catSources.map(src => {
+                  const tr = testResults[src.id];
+                  const effectiveStatus = tr?.tested ? tr.status : src.status;
+                  const isTesting = testing[src.id];
+                  const { text: stLabel, cls: stCls } = statusLabel(effectiveStatus);
+                  const tab = TABS.find(t => t.id === src.id);
+                  const catBorder = CATEGORY_COLORS[src.category] || 'border-border bg-card/40';
+
+                  return (
+                    <div key={src.id} className={`rounded-xl border ${catBorder} p-3.5 flex flex-col gap-2.5 transition-all`}>
+                      {/* Row 1: icon + name + status dot */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={tab?.color ?? 'text-muted-foreground'}>{tab?.icon ?? <Globe className="w-3.5 h-3.5" />}</span>
+                          <span className="font-mono text-xs font-bold text-foreground truncate">{src.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <StatusDot status={effectiveStatus} testing={isTesting} />
+                          <span className={`text-[10px] font-mono ${stCls}`}>{stLabel}</span>
+                        </div>
+                      </div>
+
+                      {/* Row 2: actions */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Navigate to source tab */}
+                        {TABS.find(t => t.id === src.id) && (
+                          <button
+                            onClick={() => onNavigate(src.id as Source)}
+                            className="text-[10px] font-mono px-2 py-1 rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                          >
+                            Open <ChevronRight className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {/* Test connection */}
+                        <button
+                          onClick={() => testSource(src.id)}
+                          disabled={isTesting}
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                        >
+                          {isTesting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Wifi className="w-2.5 h-2.5" />}
+                          Test
+                        </button>
+                        {/* Configure (for API-key sources without keys) */}
+                        {src.keyRequired && !src.hasKey && (
+                          <a
+                            href={`${BASE}/settings`}
+                            className="text-[10px] font-mono px-2 py-1 rounded bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 transition-colors flex items-center gap-1"
+                          >
+                            <Settings className="w-2.5 h-2.5" /> Configure
+                          </a>
+                        )}
+                        {/* Docs link */}
+                        <a
+                          href={src.docsUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 ml-auto"
+                        >
+                          Docs <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                      {/* Test result banner */}
+                      {tr?.tested && (
+                        <div className={`text-[10px] font-mono rounded px-2 py-1 ${tr.status === 'connected' ? 'bg-green-500/10 text-green-400' : tr.status === 'no-key' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {tr.status === 'connected' ? '✓ Connection verified' : tr.status === 'no-key' ? '⚠ API key not configured' : '✗ Connection failed — check network or key'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Settings hint */}
+          {sources.filter(s => s.keyRequired && !s.hasKey).length > 0 && (
+            <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 flex items-center gap-3">
+              <Key className="w-4 h-4 text-yellow-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-mono font-bold text-yellow-400">API keys missing for {sources.filter(s => s.keyRequired && !s.hasKey).length} source(s)</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Go to Settings → Integration Settings → Threat Intelligence APIs to add keys. They will automatically activate the corresponding feeds.</p>
+              </div>
+              <a href={`${BASE}/settings`} className="shrink-0 text-[10px] font-mono px-3 py-1.5 rounded-md bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 transition-colors flex items-center gap-1">
+                <Settings className="w-3 h-3" /> Settings
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
