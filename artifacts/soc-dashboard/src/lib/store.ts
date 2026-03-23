@@ -89,6 +89,7 @@ export interface SettingsValues {
   uiDensity: 'comfortable' | 'compact';
   tickerSpeed: number;
   dataRetention: number;
+  tiIngestionPeriod: number;
 }
 
 interface SettingsState extends SettingsValues {
@@ -119,6 +120,7 @@ function readAllSettings(): SettingsValues {
     uiDensity: (localStorage.getItem('soc_ui_density') as 'comfortable' | 'compact') ?? 'comfortable',
     tickerSpeed: readInt('soc_ticker_speed', 4500),
     dataRetention: readInt('soc_data_retention', 30),
+    tiIngestionPeriod: readInt('soc_ti_period', 7),
   };
 }
 
@@ -141,6 +143,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (patch.uiDensity !== undefined) localStorage.setItem('soc_ui_density', patch.uiDensity);
     if (patch.tickerSpeed !== undefined) localStorage.setItem('soc_ticker_speed', String(patch.tickerSpeed));
     if (patch.dataRetention !== undefined) localStorage.setItem('soc_data_retention', String(patch.dataRetention));
+    if (patch.tiIngestionPeriod !== undefined) localStorage.setItem('soc_ti_period', String(patch.tiIngestionPeriod));
 
     if (patch.accentColor !== undefined) applyAccentToDOM(next.accentColor);
     if (patch.uiDensity !== undefined) applyDensityToDOM(next.uiDensity);

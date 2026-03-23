@@ -85,13 +85,16 @@ router.get("/hackernews", async (req, res) => {
 });
 
 // ─── CISA KEV ──────────────────────────────────────────────────────────────
-router.get("/cisa-kev", async (_req, res) => {
+router.get("/cisa-kev", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const cutoff = new Date(Date.now() - period * 86400000).toISOString().slice(0, 10);
   const resp = await safeFetch("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json");
   if (resp?.ok) {
     const raw = await resp.json() as any;
     const all = raw.vulnerabilities || [];
     const sorted = [...all].sort((a: any, b: any) => b.dateAdded.localeCompare(a.dateAdded));
-    const items = sorted.slice(0, 100).map((v: any) => ({
+    const filtered = sorted.filter((v: any) => v.dateAdded >= cutoff);
+    const items = (filtered.length > 0 ? filtered : sorted.slice(0, 50)).map((v: any) => ({
       id: v.cveID,
       cveId: v.cveID,
       vendorProject: v.vendorProject,
@@ -103,22 +106,20 @@ router.get("/cisa-kev", async (_req, res) => {
       dueDate: v.dueDate,
       ransomware: v.knownRansomwareCampaignUse === "Known",
     }));
-    res.json({ data: items, source: "cisa-kev", total: all.length });
+    res.json({ data: items, source: "cisa-kev", total: all.length, period });
     return;
   }
-  const mock = [
-    { id: "CVE-2024-21893", cveId: "CVE-2024-21893", vendorProject: "Ivanti", product: "Connect Secure, Policy Secure", vulnerabilityName: "Ivanti Connect Secure SSRF", dateAdded: "2024-02-02", shortDescription: "Server-side request forgery in Ivanti Connect Secure.", requiredAction: "Apply mitigations per vendor instructions.", dueDate: "2024-02-23", ransomware: false },
-    { id: "CVE-2024-21887", cveId: "CVE-2024-21887", vendorProject: "Ivanti", product: "Connect Secure, Policy Secure", vulnerabilityName: "Ivanti Command Injection", dateAdded: "2024-01-11", shortDescription: "Command injection in web components of Ivanti Connect Secure.", requiredAction: "Apply mitigations per vendor instructions.", dueDate: "2024-02-02", ransomware: false },
-    { id: "CVE-2023-46805", cveId: "CVE-2023-46805", vendorProject: "Ivanti", product: "Connect Secure, Policy Secure", vulnerabilityName: "Ivanti Authentication Bypass", dateAdded: "2024-01-11", shortDescription: "Authentication bypass in web component of Ivanti Connect Secure.", requiredAction: "Apply mitigations per vendor instructions.", dueDate: "2024-02-02", ransomware: false },
-  ];
-  res.json({ data: mock, source: "cisa-kev", total: mock.length, mock: true });
+  res.json({ data: [], source: "cisa-kev", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── NVD CVEs ───────────────────────────────────────────────────────────────
 router.get("/nvd", async (req, res) => {
   const keyword = (req.query.keyword as string) || "";
   const severity = (req.query.severity as string) || "";
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const startDate = new Date(Date.now() - period * 86400000);
   let url = `https://services.nvd.nist.gov/rest/json/cves/2.0?resultsPerPage=20`;
+  url += `&pubStartDate=${startDate.toISOString()}`;
   if (keyword) url += `&keywordSearch=${encodeURIComponent(keyword)}`;
   if (severity) url += `&cvssV3Severity=${severity.toUpperCase()}`;
 
@@ -141,47 +142,40 @@ router.get("/nvd", async (req, res) => {
         weaknesses: (cve.weaknesses || []).flatMap((w: any) => w.description?.map((d: any) => d.value)).filter(Boolean).slice(0, 3),
       };
     });
-    res.json({ data: items, source: "nvd", total: raw.totalResults || items.length });
+    res.json({ data: items, source: "nvd", total: raw.totalResults || items.length, period });
     return;
   }
-  const mock = [
-    { id: "CVE-2024-1234", cveId: "CVE-2024-1234", description: "A critical remote code execution vulnerability in a popular web framework allows unauthenticated attackers to execute arbitrary code.", published: new Date(Date.now() - 86400000).toISOString(), lastModified: new Date().toISOString(), severity: "CRITICAL", score: 9.8, vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", references: [], weaknesses: ["CWE-78"] },
-    { id: "CVE-2024-5678", cveId: "CVE-2024-5678", description: "An SQL injection vulnerability in a database management system allows privilege escalation.", published: new Date(Date.now() - 172800000).toISOString(), lastModified: new Date().toISOString(), severity: "HIGH", score: 8.1, vectorString: "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H", references: [], weaknesses: ["CWE-89"] },
-  ];
-  res.json({ data: mock, source: "nvd", total: mock.length, mock: true });
+  res.json({ data: [], source: "nvd", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── ThreatFox ─────────────────────────────────────────────────────────────
-router.get("/threatfox", async (_req, res) => {
+router.get("/threatfox", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
   const resp = await safeFetch("https://threatfox-api.abuse.ch/api/v1/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: "get_iocs", days: 3 }),
+    body: JSON.stringify({ query: "get_iocs", days: period }),
   });
   if (resp?.ok) {
     const data = await resp.json() as any;
-    const items = (data.data ?? []).slice(0, 50).map((d: any) => ({
+    const items = (data.data ?? []).slice(0, 100).map((d: any) => ({
       id: d.id, type: d.ioc_type, value: d.ioc, malware: d.malware,
       confidence: d.confidence_level, firstSeen: d.first_seen, tags: d.tags ?? [],
     }));
-    res.json({ data: items, source: "threatfox", total: items.length });
+    res.json({ data: items, source: "threatfox", total: items.length, period });
     return;
   }
-  const mock = [
-    { id: "tf-001", type: "ip:port", value: "185.220.101.33:443", malware: "CobaltStrike", confidence: 90, firstSeen: new Date(Date.now() - 86400000).toISOString(), tags: ["c2", "cobalt_strike"] },
-    { id: "tf-002", type: "domain", value: "evil-c2.xyz", malware: "AsyncRAT", confidence: 75, firstSeen: new Date(Date.now() - 172800000).toISOString(), tags: ["rat", "asyncrat"] },
-    { id: "tf-003", type: "sha256_hash", value: "a1b2c3d4e5f67890abcd1234567890abcd1234567890abcd1234567890abcd12", malware: "Raccoon Stealer", confidence: 85, firstSeen: new Date(Date.now() - 3600000).toISOString(), tags: ["stealer"] },
-    { id: "tf-004", type: "url", value: "http://45.33.32.156/drop/loader.exe", malware: "RedLine", confidence: 80, firstSeen: new Date(Date.now() - 7200000).toISOString(), tags: ["stealer", "loader"] },
-  ];
-  res.json({ data: mock, source: "threatfox", total: mock.length, mock: true });
+  res.json({ data: [], source: "threatfox", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── URLHaus ────────────────────────────────────────────────────────────────
-router.get("/urlhaus", async (_req, res) => {
+router.get("/urlhaus", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const limit = period <= 1 ? 30 : period <= 7 ? 50 : 100;
   const resp = await safeFetch("https://urlhaus-api.abuse.ch/v1/urls/recent/", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "limit=30",
+    body: `limit=${limit}`,
   });
   if (resp?.ok) {
     const data = await resp.json() as any;
@@ -189,27 +183,24 @@ router.get("/urlhaus", async (_req, res) => {
       id: u.id, url: u.url, status: u.url_status, host: u.host,
       dateAdded: u.date_added, tags: u.tags ?? [], threat: u.threat,
     }));
-    res.json({ data: items, source: "urlhaus", total: items.length });
+    res.json({ data: items, source: "urlhaus", total: items.length, period });
     return;
   }
-  const mock = [
-    { id: "uh-001", url: "http://45.89.127.238/payload/drop.ps1", status: "online", host: "45.89.127.238", dateAdded: new Date(Date.now() - 43200000).toISOString(), tags: ["powershell", "dropper"], threat: "malware_download" },
-    { id: "uh-002", url: "http://malware-dist.ru/files/loader.exe", status: "online", host: "malware-dist.ru", dateAdded: new Date(Date.now() - 86400000).toISOString(), tags: ["loader"], threat: "malware_download" },
-    { id: "uh-003", url: "http://185.234.218.23/c2/gate.php", status: "offline", host: "185.234.218.23", dateAdded: new Date(Date.now() - 172800000).toISOString(), tags: ["c2"], threat: "botnet_cc" },
-  ];
-  res.json({ data: mock, source: "urlhaus", total: mock.length, mock: true });
+  res.json({ data: [], source: "urlhaus", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── Malware Bazaar ─────────────────────────────────────────────────────────
-router.get("/malwarebazaar", async (_req, res) => {
+router.get("/malwarebazaar", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const selector = period <= 1 ? 50 : period <= 7 ? 100 : 200;
   const resp = await safeFetch("https://mb-api.abuse.ch/api/v1/", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "query=get_recent&selector=100",
+    body: `query=get_recent&selector=${selector}`,
   });
   if (resp?.ok) {
     const data = await resp.json() as any;
-    const items = (data.data ?? []).slice(0, 50).map((m: any) => ({
+    const items = (data.data ?? []).slice(0, 100).map((m: any) => ({
       id: m.sha256_hash,
       sha256: m.sha256_hash,
       md5: m.md5_hash,
@@ -223,22 +214,20 @@ router.get("/malwarebazaar", async (_req, res) => {
       lastSeen: m.last_seen,
       reporter: m.reporter,
     }));
-    res.json({ data: items, source: "malwarebazaar", total: items.length });
+    res.json({ data: items, source: "malwarebazaar", total: items.length, period });
     return;
   }
-  const mock = [
-    { id: "abc123def456abc123def456abc123def456abc123def456abc123def456abc1", sha256: "abc123def456abc123def456abc123def456abc123def456abc123def456abc1", md5: "d41d8cd98f00b204e9800998ecf8427e", sha1: "da39a3ee5e6b4b0d3255bfef95601890afd80709", fileName: "invoice_9823.exe", fileType: "exe", fileSize: 245760, malwareName: "AgentTesla", tags: ["stealer", "agent_tesla"], firstSeen: new Date(Date.now() - 3600000).toISOString(), lastSeen: new Date().toISOString(), reporter: "abuse_ch" },
-    { id: "bcd234ef5678bcd234ef5678bcd234ef5678bcd234ef5678bcd234ef5678bcd2", sha256: "bcd234ef5678bcd234ef5678bcd234ef5678bcd234ef5678bcd234ef5678bcd2", md5: "7215ee9c7d9dc229d2921a40e899ec5f", sha1: "adc83b19e793491b1c6ea0fd8b46cd9f32e592fc", fileName: "update.dll", fileType: "dll", fileSize: 102400, malwareName: "Emotet", tags: ["emotet", "banking_trojan"], firstSeen: new Date(Date.now() - 7200000).toISOString(), lastSeen: new Date().toISOString(), reporter: "viriback" },
-  ];
-  res.json({ data: mock, source: "malwarebazaar", total: mock.length, mock: true });
+  res.json({ data: [], source: "malwarebazaar", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── CIRCL CVE ──────────────────────────────────────────────────────────────
-router.get("/circl", async (_req, res) => {
-  const resp = await safeFetch("https://cve.circl.lu/api/last/30", {}, 10000);
+router.get("/circl", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const count = period <= 1 ? 20 : period <= 7 ? 30 : period <= 14 ? 50 : 100;
+  const resp = await safeFetch(`https://cve.circl.lu/api/last/${count}`, {}, 10000);
   if (resp?.ok) {
     const raw = await resp.json() as any[];
-    const items = raw.slice(0, 30).map((c: any) => ({
+    const items = raw.slice(0, count).map((c: any) => ({
       id: c.id || c.CVE_data_meta?.ID,
       cveId: c.id || c.CVE_data_meta?.ID,
       description: c.summary || c.description?.description_data?.[0]?.value || "",
@@ -249,20 +238,19 @@ router.get("/circl", async (_req, res) => {
       cwe: c.cwe,
       references: (c.references || []).slice(0, 3),
     }));
-    res.json({ data: items, source: "circl", total: items.length });
+    res.json({ data: items, source: "circl", total: items.length, period });
     return;
   }
-  const mock = [
-    { id: "CVE-2024-0001", cveId: "CVE-2024-0001", description: "Buffer overflow in network driver allows remote code execution via crafted packets.", published: new Date(Date.now() - 86400000).toISOString(), modified: new Date().toISOString(), cvss: 9.0, cvss3: 9.8, cwe: "CWE-122", references: ["https://example.com/advisory"] },
-    { id: "CVE-2024-0002", cveId: "CVE-2024-0002", description: "Cross-site scripting in web portal allows attackers to inject malicious scripts.", published: new Date(Date.now() - 172800000).toISOString(), modified: new Date().toISOString(), cvss: 6.1, cvss3: 6.1, cwe: "CWE-79", references: [] },
-  ];
-  res.json({ data: mock, source: "circl", total: mock.length, mock: true });
+  res.json({ data: [], source: "circl", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── Reddit Security ────────────────────────────────────────────────────────
-router.get("/reddit", async (_req, res) => {
+router.get("/reddit", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const timeFilter = period <= 1 ? "day" : period <= 7 ? "week" : "month";
+  const limit = period <= 1 ? 20 : period <= 7 ? 30 : 50;
   const subs = "netsec+cybersecurity+blueteamsec+Malware+netsecstudents";
-  const resp = await safeFetch(`https://www.reddit.com/r/${subs}/hot.json?limit=30`, {
+  const resp = await safeFetch(`https://www.reddit.com/r/${subs}/top.json?t=${timeFilter}&limit=${limit}`, {
     headers: { "User-Agent": "UnifiedThreatAlert/1.0" },
   });
   if (resp?.ok) {
@@ -280,15 +268,10 @@ router.get("/reddit", async (_req, res) => {
       selftext: (p.selftext || "").slice(0, 200),
       flair: p.link_flair_text,
     }));
-    res.json({ data: items, source: "reddit", total: items.length });
+    res.json({ data: items, source: "reddit", total: items.length, period });
     return;
   }
-  const mock = [
-    { id: "abc1", title: "New ransomware group targeting critical infrastructure sectors", url: "https://reddit.com/r/netsec/comments/abc1", author: "security_researcher", subreddit: "netsec", score: 342, numComments: 45, created: new Date(Date.now() - 3600000).toISOString(), selftext: "", flair: "Threat Intel" },
-    { id: "abc2", title: "PoC exploit published for critical RCE in enterprise VPN", url: "https://reddit.com/r/netsec/comments/abc2", author: "vuln_hunter", subreddit: "cybersecurity", score: 289, numComments: 67, created: new Date(Date.now() - 7200000).toISOString(), selftext: "", flair: "Vulnerability" },
-    { id: "abc3", title: "Analysis: How APT29 is using legitimate cloud services for C2", url: "https://reddit.com/r/blueteamsec/comments/abc3", author: "blueteam_analyst", subreddit: "blueteamsec", score: 198, numComments: 23, created: new Date(Date.now() - 14400000).toISOString(), selftext: "", flair: "Analysis" },
-  ];
-  res.json({ data: mock, source: "reddit", total: mock.length, mock: true });
+  res.json({ data: [], source: "reddit", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── OTX (AlienVault) ───────────────────────────────────────────────────────
@@ -544,12 +527,19 @@ router.get("/overview", async (_req, res) => {
 });
 
 // ─── Feodo Tracker ──────────────────────────────────────────────────────────
-router.get("/feodo", async (_req, res) => {
+router.get("/feodo", async (req, res) => {
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const cutoff = new Date(Date.now() - period * 86400000);
   const resp = await safeFetch("https://feodotracker.abuse.ch/downloads/ipblocklist.json", {}, 12000);
   if (resp?.ok) {
     const raw = await resp.json() as any;
     const list: any[] = Array.isArray(raw) ? raw : (raw.blocklist ?? []);
-    const items = list.slice(0, 150).map((e: any) => ({
+    const filtered = list.filter((e: any) => {
+      const seen = e.first_seen ? new Date(e.first_seen) : null;
+      return !seen || seen >= cutoff;
+    });
+    const final = filtered.length > 0 ? filtered : list.slice(0, 50);
+    const items = final.slice(0, 200).map((e: any) => ({
       id: `${e.ip_address}:${e.port}`,
       ip: e.ip_address,
       port: e.port,
@@ -562,21 +552,18 @@ router.get("/feodo", async (_req, res) => {
       malware: e.malware,
       asnName: e.as_name,
     }));
-    res.json({ data: items, source: "feodo", total: list.length });
+    res.json({ data: items, source: "feodo", total: list.length, period });
     return;
   }
-  const mock = [
-    { id: "185.220.101.1:443", ip: "185.220.101.1", port: 443, status: "online", hostname: null, abuseScore: 100, country: "NL", firstSeen: new Date(Date.now() - 86400000).toISOString(), lastSeen: new Date().toISOString(), malware: "Cobalt Strike", asnName: "AS-CHOOPA" },
-    { id: "45.61.186.13:8080", ip: "45.61.186.13", port: 8080, status: "online", hostname: null, abuseScore: 95, country: "US", firstSeen: new Date(Date.now() - 172800000).toISOString(), lastSeen: new Date().toISOString(), malware: "QakBot", asnName: "VULTR-AS" },
-    { id: "194.165.16.11:443", ip: "194.165.16.11", port: 443, status: "offline", hostname: null, abuseScore: 80, country: "RU", firstSeen: new Date(Date.now() - 604800000).toISOString(), lastSeen: new Date(Date.now() - 86400000).toISOString(), malware: "Emotet", asnName: "SELECTEL" },
-  ];
-  res.json({ data: mock, source: "feodo", total: mock.length, mock: true });
+  res.json({ data: [], source: "feodo", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── GitHub Security Advisories ─────────────────────────────────────────────
 router.get("/ghsa", async (req, res) => {
   const severity = (req.query.severity as string) || "";
-  let url = "https://api.github.com/advisories?per_page=30&type=reviewed&direction=desc&sort=published";
+  const period = parseInt((req.query.period as string) || "7", 10);
+  const perPage = period <= 1 ? 20 : period <= 7 ? 30 : 50;
+  let url = `https://api.github.com/advisories?per_page=${perPage}&type=reviewed&direction=desc&sort=published`;
   if (severity) url += `&severity=${severity}`;
   const resp = await safeFetch(url, {
     headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "UnifiedThreatAlert/1.0" },
@@ -599,14 +586,10 @@ router.get("/ghsa", async (req, res) => {
       references: (a.references || []).slice(0, 3),
       url: a.html_url,
     }));
-    res.json({ data: items, source: "ghsa", total: items.length });
+    res.json({ data: items, source: "ghsa", total: items.length, period });
     return;
   }
-  const mock = [
-    { id: "GHSA-xxxx-yyyy-zzzz", ghsaId: "GHSA-xxxx-yyyy-zzzz", cveId: "CVE-2024-12345", summary: "Critical RCE in popular npm package allows arbitrary code execution", description: "A remote code execution vulnerability exists in the affected package.", severity: "CRITICAL", cvss: 9.8, cwes: ["CWE-78"], publishedAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date().toISOString(), ecosystem: "npm", packageName: "example-pkg", references: [], url: "https://github.com/advisories/GHSA-xxxx-yyyy-zzzz" },
-    { id: "GHSA-aaaa-bbbb-cccc", ghsaId: "GHSA-aaaa-bbbb-cccc", cveId: "CVE-2024-67890", summary: "SQL injection in Python web framework allows data exfiltration", description: "An SQL injection vulnerability in the query builder permits data exfiltration.", severity: "HIGH", cvss: 7.5, cwes: ["CWE-89"], publishedAt: new Date(Date.now() - 172800000).toISOString(), updatedAt: new Date().toISOString(), ecosystem: "pip", packageName: "example-framework", references: [], url: "https://github.com/advisories/GHSA-aaaa-bbbb-cccc" },
-  ];
-  res.json({ data: mock, source: "ghsa", total: mock.length, mock: true });
+  res.json({ data: [], source: "ghsa", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── EPSS (Exploit Prediction Scoring System) ────────────────────────────────
@@ -627,14 +610,7 @@ router.get("/epss", async (req, res) => {
     res.json({ data: items, source: "epss", total: raw.total ?? items.length, date: raw.date });
     return;
   }
-  const mock = [
-    { id: "CVE-2023-46805", cveId: "CVE-2023-46805", epss: 0.9731, percentile: 0.9999, date: new Date().toISOString().slice(0, 10) },
-    { id: "CVE-2024-21887", cveId: "CVE-2024-21887", epss: 0.9654, percentile: 0.9997, date: new Date().toISOString().slice(0, 10) },
-    { id: "CVE-2023-4966", cveId: "CVE-2023-4966", epss: 0.9567, percentile: 0.9995, date: new Date().toISOString().slice(0, 10) },
-    { id: "CVE-2023-22527", cveId: "CVE-2023-22527", epss: 0.9501, percentile: 0.9993, date: new Date().toISOString().slice(0, 10) },
-    { id: "CVE-2024-3400", cveId: "CVE-2024-3400", epss: 0.9489, percentile: 0.9991, date: new Date().toISOString().slice(0, 10) },
-  ];
-  res.json({ data: mock, source: "epss", total: mock.length, mock: true });
+  res.json({ data: [], source: "epss", total: 0, error: "upstream_unavailable" });
 });
 
 // ─── GeoIP ──────────────────────────────────────────────────────────────────

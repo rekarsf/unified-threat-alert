@@ -534,6 +534,14 @@ const RETENTION_OPTIONS = [
   { label: '1 year', value: '365' },
 ];
 
+const TI_PERIOD_OPTIONS = [
+  { label: '24 hours', value: '1', desc: 'Most recent data only' },
+  { label: '3 days', value: '3', desc: 'Short window, fast queries' },
+  { label: '7 days', value: '7', desc: 'Balanced coverage (default)' },
+  { label: '14 days', value: '14', desc: 'Extended lookback' },
+  { label: '30 days', value: '30', desc: 'Full month, larger dataset' },
+];
+
 const TICKER_OPTIONS = [
   { label: 'Slow (8 s)', value: '8000' },
   { label: 'Normal (4.5 s)', value: '4500' },
@@ -542,20 +550,21 @@ const TICKER_OPTIONS = [
 
 function CenterSettingsTab() {
   const { toast } = useToast();
-  const { refreshInterval, accentColor, uiDensity, tickerSpeed, dataRetention, save } = useSettingsStore();
+  const { refreshInterval, accentColor, uiDensity, tickerSpeed, dataRetention, tiIngestionPeriod, save } = useSettingsStore();
 
   const refresh = String(refreshInterval);
   const accent = accentColor;
   const density = uiDensity;
   const ticker = String(tickerSpeed);
   const retention = String(dataRetention);
+  const tiPeriod = String(tiIngestionPeriod);
 
-  // Each setter applies changes immediately through the store
   const setRefresh = (v: string) => save({ refreshInterval: parseInt(v, 10) });
   const setAccent = (v: string) => save({ accentColor: v });
   const setDensity = (v: 'comfortable' | 'compact') => save({ uiDensity: v });
   const setTicker = (v: string) => save({ tickerSpeed: parseInt(v, 10) });
   const setRetention = (v: string) => save({ dataRetention: parseInt(v, 10) });
+  const setTiPeriod = (v: string) => save({ tiIngestionPeriod: parseInt(v, 10) });
 
   const handleSave = () => {
     toast({ title: 'Preferences saved', description: 'All settings are active and stored for future sessions.' });
@@ -586,6 +595,35 @@ function CenterSettingsTab() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Threat Intel Ingestion Period */}
+      <div className="border border-border rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Activity className="w-4 h-4 text-primary" />
+          <h3 className="font-mono text-sm font-semibold text-foreground">Threat Intelligence Ingestion Period</h3>
+          <span className="text-[10px] font-mono text-muted-foreground ml-auto">How far back each TI feed looks for data</span>
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {TI_PERIOD_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setTiPeriod(opt.value)}
+              className={`text-left px-3 py-2.5 rounded-lg border transition-all ${
+                tiPeriod === opt.value
+                  ? 'bg-primary/15 border-primary'
+                  : 'border-border hover:border-border/80'
+              }`}
+            >
+              <div className={`text-xs font-mono font-medium ${tiPeriod === opt.value ? 'text-primary' : 'text-foreground'}`}>{opt.label}</div>
+              <div className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{opt.desc}</div>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] font-mono text-muted-foreground mt-3 leading-relaxed">
+          Controls the lookback window for all threat intel feeds (CISA KEV, ThreatFox, NVD, GHSA, Reddit, etc.).
+          Shorter periods return fresher, smaller datasets. Longer periods cast a wider net.
+        </p>
       </div>
 
       {/* Theme */}

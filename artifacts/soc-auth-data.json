@@ -27,12 +27,36 @@
         "admin.roles",
         "admin.settings"
       ],
-      "lastLogin": "2026-03-22T21:13:32.790Z",
+      "lastLogin": "2026-03-23T08:12:33.140Z",
       "createdAt": "2026-03-21T16:29:41.969Z"
     }
   ],
   "settings": {},
   "auditLog": [
+    {
+      "id": "39c8b4a3-e92c-4f06-8f55-44aa7c307495",
+      "timestamp": "2026-03-23T08:12:33.140Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "f55cde4e-72ce-4c08-b50f-3f1be28b8abc",
+      "timestamp": "2026-03-23T08:12:22.967Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
+    {
+      "id": "1087dbba-66cb-4183-8c55-2e30d6bc115d",
+      "timestamp": "2026-03-23T08:12:15.884Z",
+      "userId": "84515532-3993-4865-bc82-084b2849a953",
+      "username": "admin",
+      "action": "login",
+      "ip": "::1"
+    },
     {
       "id": "4abb70c9-db0a-4e69-9878-2bf2fb4358ba",
       "timestamp": "2026-03-22T21:13:32.791Z",

@@ -1,10 +1,5 @@
 import { Router } from "express";
 import { requireAuth, requireScope } from "../middlewares/requireAuth.js";
-import {
-  MOCK_LR_ALARMS, MOCK_LR_CASES, MOCK_LR_LOG_SOURCES,
-  MOCK_LR_HOSTS, MOCK_LR_NETWORKS, MOCK_LR_ENTITIES,
-  MOCK_LR_AGENTS, MOCK_LR_LISTS
-} from "../lib/mockData.js";
 import { getAuthData } from "../lib/auth.js";
 
 const router = Router();
@@ -88,11 +83,7 @@ router.get("/alarms", requireScope("lr.alarms.view"), async (req, res) => {
     return;
   }
 
-  const status = req.query.status as string | undefined;
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-  let results = MOCK_LR_ALARMS;
-  if (status) results = results.filter((a) => a.alarmStatus === status);
-  res.json({ data: results.slice(0, limit), total: results.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured", message: "Configure LogRhythm credentials in Settings to see live data." });
 });
 
 // ── GET /api/lr/cases ────────────────────────────────────────────────────────
@@ -108,8 +99,7 @@ router.get("/cases", requireScope("lr.cases.view"), async (req, res) => {
     return;
   }
 
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-  res.json({ data: MOCK_LR_CASES.slice(0, limit), total: MOCK_LR_CASES.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/logsources ───────────────────────────────────────────────────
@@ -123,7 +113,7 @@ router.get("/logsources", requireScope("lr.logs.view"), async (req, res) => {
     res.json({ data: items, total: items.length, live: true });
     return;
   }
-  res.json({ data: MOCK_LR_LOG_SOURCES, total: MOCK_LR_LOG_SOURCES.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/hosts ────────────────────────────────────────────────────────
@@ -137,7 +127,7 @@ router.get("/hosts", async (req, res) => {
     res.json({ data: items, total: items.length, live: true });
     return;
   }
-  res.json({ data: MOCK_LR_HOSTS, total: MOCK_LR_HOSTS.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/networks ─────────────────────────────────────────────────────
@@ -151,7 +141,7 @@ router.get("/networks", async (req, res) => {
     res.json({ data: items, total: items.length, live: true });
     return;
   }
-  res.json({ data: MOCK_LR_NETWORKS, total: MOCK_LR_NETWORKS.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/entities ─────────────────────────────────────────────────────
@@ -165,7 +155,7 @@ router.get("/entities", async (req, res) => {
     res.json({ data: items, total: items.length, live: true });
     return;
   }
-  res.json({ data: MOCK_LR_ENTITIES, total: MOCK_LR_ENTITIES.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/agents ───────────────────────────────────────────────────────
@@ -179,7 +169,7 @@ router.get("/agents", async (req, res) => {
     res.json({ data: items, total: items.length, live: true });
     return;
   }
-  res.json({ data: MOCK_LR_AGENTS, total: MOCK_LR_AGENTS.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/lists ────────────────────────────────────────────────────────
@@ -193,7 +183,7 @@ router.get("/lists", async (req, res) => {
     res.json({ data: items, total: items.length, live: true });
     return;
   }
-  res.json({ data: MOCK_LR_LISTS, total: MOCK_LR_LISTS.length, mock: true });
+  res.json({ data: [], total: 0, error: "not_configured" });
 });
 
 // ── GET /api/lr/search ───────────────────────────────────────────────────────
@@ -222,13 +212,7 @@ router.get("/search", requireScope("lr.logs.search"), async (req, res) => {
     }
   }
 
-  // Mock results when no credentials
-  const results = query ? [
-    { id: "log-001", timestamp: new Date().toISOString(), message: `[INFO] Authentication successful for user admin from 10.0.1.5`, source: "Windows Security", severity: "info" },
-    { id: "log-002", timestamp: new Date(Date.now() - 30000).toISOString(), message: `[WARN] Failed login attempt for user ${query} from 185.220.101.33`, source: "Active Directory", severity: "warning" },
-    { id: "log-003", timestamp: new Date(Date.now() - 60000).toISOString(), message: `[ERROR] Suspicious process execution: cmd.exe /c whoami`, source: "Windows Sysmon", severity: "error" },
-  ] : [];
-  res.json({ data: results, total: results.length, query, mock: true });
+  res.json({ data: [], total: 0, query, error: "not_configured" });
 });
 
 // ── POST /api/lr/search-results ──────────────────────────────────────────────
@@ -237,7 +221,7 @@ router.post("/search-results", requireScope("lr.logs.search"), async (req, res) 
   const data = getAuthData();
   const real = await lrFetch("/lr-search-api/actions/search-result", data.settings as any, "", "POST", req.body);
   if (real) { res.json({ ...(real as object), live: true }); return; }
-  res.json({ items: [], totalCount: 0, taskStatus: "COMPLETE", mock: true });
+  res.json({ items: [], totalCount: 0, taskStatus: "COMPLETE", error: "not_configured" });
 });
 
 // ── GET /api/lr/drilldown ────────────────────────────────────────────────────
@@ -246,7 +230,7 @@ router.get("/drilldown", requireScope("lr.alarms.view"), async (req, res) => {
   const data = getAuthData();
   const real = await lrFetch("/lr-drilldown-cache-api/drilldown", data.settings as any, qs(req));
   if (real) { res.json({ ...(real as object), live: true }); return; }
-  res.json({ data: [], mock: true });
+  res.json({ data: [], error: "not_configured" });
 });
 
 export default router;

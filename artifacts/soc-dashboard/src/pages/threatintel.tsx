@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useSettingsStore } from '@/lib/store';
 import {
   Rss, Shield, AlertTriangle, ExternalLink, Clock, Search, RefreshCw,
   Bug, Link2, Package, Globe, Hash, ChevronRight, Activity, Eye,
@@ -54,8 +54,10 @@ const SOURCE_DOCS: Record<string, { url: string; desc: string }> = {
 
 function useTI(source: string, params: Record<string, string> = {}, enabled = true) {
   const { token } = useAuthStore();
-  const qs = new URLSearchParams(params).toString();
-  const url = `${BASE}/api/threatintel/${source}${qs ? '?' + qs : ''}`;
+  const { tiIngestionPeriod } = useSettingsStore();
+  const allParams = { period: String(tiIngestionPeriod), ...params };
+  const qs = new URLSearchParams(allParams).toString();
+  const url = `${BASE}/api/threatintel/${source}?${qs}`;
   return useQuery({
     queryKey: [url],
     queryFn: async () => {
@@ -145,7 +147,7 @@ function RequiresKey({ source }: { source: string }) {
   );
 }
 
-function SourceHeader({ source, count, isMock, onRefresh, isLoading }: { source: string; count?: number; isMock?: boolean; onRefresh: () => void; isLoading: boolean }) {
+function SourceHeader({ source, count, error, onRefresh, isLoading }: { source: string; count?: number; error?: string; onRefresh: () => void; isLoading: boolean }) {
   const tab = TABS.find(t => t.id === source);
   const doc = SOURCE_DOCS[source];
   return (
@@ -156,7 +158,7 @@ function SourceHeader({ source, count, isMock, onRefresh, isLoading }: { source:
           <span className="font-mono text-sm font-bold text-foreground">{tab?.label}</span>
           {count != null && <span className="text-muted-foreground text-xs font-mono ml-2">{count} items</span>}
         </div>
-        {isMock && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 shrink-0">MOCK DATA</span>}
+        {error && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 shrink-0">FEED UNAVAILABLE</span>}
       </div>
       <div className="flex items-center gap-2">
         {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"><ExternalLink className="w-3 h-3" /> Docs</a>}
@@ -410,7 +412,7 @@ function HackerNewsTab() {
   const hits: any[] = data?.hits || [];
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="hackernews" count={hits.length} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="hackernews" count={hits.length} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex flex-wrap gap-2 items-center">
         {HN_QUERIES.map(q => (
           <button key={q} onClick={() => setQuery(q)}
@@ -468,7 +470,7 @@ function CisaKevTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="cisa-kev" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="cisa-kev" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by CVE ID, vendor, or name..."
@@ -519,7 +521,7 @@ function NvdTab() {
   const items: any[] = data?.data || [];
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="nvd" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="nvd" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1">
           <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -577,7 +579,7 @@ function ThreatFoxTab() {
   const typeIcon: Record<string, string> = { 'ip:port': '🌐', domain: '🔗', 'sha256_hash': '#️⃣', url: '🔗', md5_hash: '#️⃣' };
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="threatfox" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="threatfox" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter IOC or malware family..."
@@ -619,7 +621,7 @@ function URLHausTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="urlhaus" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="urlhaus" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter URL or host..."
@@ -658,7 +660,7 @@ function MalwareBazaarTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="malwarebazaar" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="malwarebazaar" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter filename or malware family..."
@@ -708,7 +710,7 @@ function CirclTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="circl" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="circl" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by CVE ID or description..."
@@ -750,7 +752,7 @@ function RedditTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="reddit" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="reddit" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by title or subreddit..."
@@ -797,7 +799,7 @@ function FeodoTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="feodo" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="feodo" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by IP, malware family, or country..."
@@ -842,7 +844,7 @@ function GhsaTab() {
   );
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="ghsa" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="ghsa" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-3">
         <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter advisory, CVE, or package..."
@@ -896,7 +898,7 @@ function EpssTab() {
   const items: any[] = data?.data || [];
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <SourceHeader source="epss" count={data?.total} isMock={data?.mock} onRefresh={refetch} isLoading={isLoading} />
+      <SourceHeader source="epss" count={data?.total} error={data?.error} onRefresh={refetch} isLoading={isLoading} />
       <div className="border-b border-border bg-card/20 px-4 py-2.5 flex items-center gap-2">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <input value={cveSearch} onChange={e => setCveSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && setActiveCve(cveSearch.trim())}
