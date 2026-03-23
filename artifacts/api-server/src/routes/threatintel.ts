@@ -346,18 +346,56 @@ router.get("/virustotal", async (_req, res) => {
 });
 
 // ─── Shodan ─────────────────────────────────────────────────────────────────
-router.get("/shodan", async (_req, res) => {
+router.get("/shodan", async (req, res) => {
   const key = await getApiKey("shodan");
   if (!key) {
     res.json({ data: [], source: "shodan", total: 0, requiresKey: true, keyName: "SHODAN_API_KEY" });
     return;
   }
-  const resp = await safeFetch(`https://api.shodan.io/shodan/alert/info?key=${key}`);
+
+  const userQuery = req.query.query as string | undefined;
+  const query = userQuery || "vuln:cve-2024";
+
+  const resp = await safeFetch(
+    `https://api.shodan.io/shodan/host/search?key=${key}&query=${encodeURIComponent(query)}`,
+    {}, 15000
+  );
+
   if (resp?.ok) {
     const raw = await resp.json() as any;
-    res.json({ data: Array.isArray(raw) ? raw.slice(0, 20) : [], source: "shodan", total: Array.isArray(raw) ? raw.length : 0 });
-    return;
+    if (raw.matches) {
+      const items = raw.matches.slice(0, 50).map((m: any) => ({
+        ip: m.ip_str, port: m.port, org: m.org, isp: m.isp,
+        os: m.os, product: m.product, version: m.version,
+        country: m.location?.country_name, city: m.location?.city,
+        lat: m.location?.latitude, lng: m.location?.longitude,
+        vulns: m.vulns ? Object.keys(m.vulns) : [],
+        timestamp: m.timestamp,
+      }));
+      res.json({ data: items, source: "shodan", total: raw.total ?? items.length, tier: "paid", query });
+      return;
+    }
   }
+
+  if (!userQuery) {
+    const freeResp = await safeFetch(
+      `https://api.shodan.io/shodan/host/search?key=${key}&query=${encodeURIComponent("port:22,3389,445")}`,
+      {}, 15000
+    );
+    if (freeResp?.ok) {
+      const freeRaw = await freeResp.json() as any;
+      const items = (freeRaw.matches || []).slice(0, 50).map((m: any) => ({
+        ip: m.ip_str, port: m.port, org: m.org, isp: m.isp,
+        os: m.os, product: m.product, version: m.version,
+        country: m.location?.country_name, city: m.location?.city,
+        lat: m.location?.latitude, lng: m.location?.longitude,
+        timestamp: m.timestamp,
+      }));
+      res.json({ data: items, source: "shodan", total: freeRaw.total ?? items.length, tier: "free", query: "port:22,3389,445" });
+      return;
+    }
+  }
+
   res.json({ data: [], source: "shodan", total: 0, error: "Failed to fetch Shodan data" });
 });
 
@@ -387,6 +425,76 @@ router.get("/abuseipdb", async (_req, res) => {
     return;
   }
   res.json({ data: [], source: "abuseipdb", total: 0, error: "Failed to fetch AbuseIPDB data" });
+});
+
+// ─── AbuseIPDB single IP check ───────────────────────────────────────────────
+router.get("/abuseipdb/check/:ip", async (req, res) => {
+  const key = await getApiKey("abuseipdb");
+  if (!key) {
+    res.json({ error: "no_key", requiresKey: true });
+    return;
+  }
+  const { ip } = req.params;
+  const days = req.query.days || "90";
+  const resp = await safeFetch(
+    `https://api.abuseipdb.com/api/v2/check?ipAddress=${encodeURIComponent(ip)}&maxAgeInDays=${days}&verbose`,
+    { headers: { Key: key, Accept: "application/json" } },
+    15000
+  );
+  if (resp?.ok) {
+    const raw = await resp.json() as any;
+    const d = raw.data || {};
+    res.json({
+      ip: d.ipAddress, isPublic: d.isPublic, abuseScore: d.abuseConfidenceScore,
+      country: d.countryCode, isp: d.isp, domain: d.domain, usageType: d.usageType,
+      totalReports: d.totalReports, numDistinctUsers: d.numDistinctUsers,
+      lastReported: d.lastReportedAt, isWhitelisted: d.isWhitelisted,
+      reports: (d.reports || []).slice(0, 10).map((r: any) => ({
+        reportedAt: r.reportedAt, comment: r.comment, categories: r.categories,
+        reporterId: r.reporterId, reporterCountryCode: r.reporterCountryCode,
+      })),
+      source: "abuseipdb",
+    });
+    return;
+  }
+  res.json({ ip, error: "AbuseIPDB check failed", source: "abuseipdb" });
+});
+
+// ─── Batch GeoIP (for world map) ─────────────────────────────────────────────
+router.post("/geoip", async (req, res) => {
+  const ips: string[] = req.body?.ips || [];
+  if (!ips.length || ips.length > 100) {
+    res.status(400).json({ error: "Provide 1-100 IPs in { ips: [...] }" });
+    return;
+  }
+
+  const batchResp = await safeFetch(
+    "http://ip-api.com/batch?fields=query,country,countryCode,city,lat,lon,isp,org,as",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(ips.map(ip => ({ query: ip }))) },
+    15000
+  );
+
+  if (batchResp?.ok) {
+    const results = await batchResp.json() as any[];
+    const mapped = results.map((r: any) => ({
+      ip: r.query, country: r.country, countryCode: r.countryCode,
+      city: r.city, lat: r.lat, lng: r.lon, isp: r.isp, org: r.org, as: r.as,
+    }));
+    res.json({ results: mapped, total: mapped.length });
+    return;
+  }
+
+  const results = await Promise.all(
+    ips.slice(0, 50).map(async (ip) => {
+      const r = await safeFetch(`http://ip-api.com/json/${ip}?fields=query,country,countryCode,city,lat,lon,isp`);
+      if (r?.ok) {
+        const d = await r.json() as any;
+        return { ip: d.query || ip, country: d.country, countryCode: d.countryCode, city: d.city, lat: d.lat, lng: d.lon, isp: d.isp };
+      }
+      return { ip };
+    })
+  );
+  res.json({ results, total: results.length });
 });
 
 // ─── Overview (aggregated) ──────────────────────────────────────────────────

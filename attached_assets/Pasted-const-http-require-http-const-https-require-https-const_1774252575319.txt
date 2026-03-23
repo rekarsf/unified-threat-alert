@@ -1,0 +1,1128 @@
+const http = require("http");
+const https = require("https");
+const url = require("url");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+
+const PORT = 3001;
+
+// ── Auth / RBAC Data Store (JSON file) ──
+const DATA_FILE = path.join(__dirname, "soc-auth-data.json");
+const JWT_SECRET = process.env.SOC_JWT_SECRET || crypto.randomBytes(32).toString("hex");
+
+// Default scopes
+const ALL_SCOPES = [
+  "s1.dashboard","s1.endpoints.view","s1.endpoints.manage","s1.alerts.view","s1.alerts.manage","s1.iocs.view",
+  "lr.dashboard","lr.alarms.view","lr.alarms.manage","lr.cases.view","lr.cases.manage","lr.logs.view","lr.logs.search","lr.admin",
+  "threatintel.view","threatintel.manage",
+  "admin.users","admin.roles","admin.settings",
+];
+
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+  } catch {}
+  // Initialize with default admin user and roles
+  const data = {
+    users: [{
+      id: crypto.randomUUID(),
+      username: "admin",
+      email: "",
+      passwordHash: hashPassword("admin"),
+      roleId: "role-admin",
+      enabled: true,
+      createdAt: new Date().toISOString(),
+    }],
+    roles: [
+      { id: "role-admin", name: "admin", description: "Full access to all systems", scopes: ALL_SCOPES, isBuiltin: true },
+      { id: "role-analyst", name: "analyst", description: "Read access to all systems", scopes: ALL_SCOPES.filter(s => !s.includes("manage") && !s.startsWith("admin")), isBuiltin: false },
+      { id: "role-s1op", name: "s1-operator", description: "SentinelOne full access", scopes: ALL_SCOPES.filter(s => s.startsWith("s1.")), isBuiltin: false },
+      { id: "role-lrop", name: "lr-operator", description: "LogRhythm full access", scopes: ALL_SCOPES.filter(s => s.startsWith("lr.")), isBuiltin: false },
+      { id: "role-readonly", name: "readonly", description: "View-only access", scopes: ["s1.dashboard","lr.dashboard","threatintel.view"], isBuiltin: false },
+    ],
+  };
+  saveData(data);
+  console.log("[AUTH] Initialized auth data with default admin user (admin/admin)");
+  return data;
+}
+
+function saveData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  const [salt, hash] = stored.split(":");
+  const verify = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+  return hash === verify;
+}
+
+function createJwt(payload) {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + 86400 })).toString("base64url");
+  const sig = crypto.createHmac("sha256", JWT_SECRET).update(`${header}.${body}`).digest("base64url");
+  return `${header}.${body}.${sig}`;
+}
+
+function verifyJwt(token) {
+  try {
+    const [header, body, sig] = token.split(".");
+    const expected = crypto.createHmac("sha256", JWT_SECRET).update(`${header}.${body}`).digest("base64url");
+    if (sig !== expected) return null;
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function getAuthUser(req) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) return null;
+  return verifyJwt(auth.slice(7));
+}
+
+let authData = loadData();
+
+// ── Audit Log ──
+const AUDIT_FILE = path.join(__dirname, "soc-audit-log.json");
+
+function loadAuditLog() {
+  try {
+    if (fs.existsSync(AUDIT_FILE)) return JSON.parse(fs.readFileSync(AUDIT_FILE, "utf-8"));
+  } catch {}
+  return [];
+}
+
+function addAuditEntry(action, username, targetUser, details) {
+  const log = loadAuditLog();
+  log.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), action, username, targetUser: targetUser || undefined, details: details || undefined });
+  // Keep last 500 entries
+  if (log.length > 500) log.length = 500;
+  fs.writeFileSync(AUDIT_FILE, JSON.stringify(log, null, 2));
+}
+
+const ROUTES = {
+  // SentinelOne — Agents
+  "/api/s1/agents": { path: "/web/api/v2.1/agents", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/agents/count": { path: "/web/api/v2.1/agents/count", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/agents/applications": { path: "/web/api/v2.1/agents/applications", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/agents/tags": { path: "/web/api/v2.1/agents/tags", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // SentinelOne — Threats
+  "/api/s1/threats": { path: "/web/api/v2.1/threats", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/threats/add-to-blacklist": { path: "/web/api/v2.1/threats/add-to-blacklist", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  "/api/s1/threats/add-to-exclusions": { path: "/web/api/v2.1/threats/add-to-exclusions", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  "/api/s1/threats/analyst-verdict": { path: "/web/api/v2.1/threats/analyst-verdict", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  "/api/s1/threats/incident": { path: "/web/api/v2.1/threats/incident", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  "/api/s1/threats/mitigate-alerts": { path: "/web/api/v2.1/threats/mitigate-alerts", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  // SentinelOne — Cloud Detection (STAR) Alerts
+  "/api/s1/cloud-detection/alerts": { path: "/web/api/v2.1/cloud-detection/alerts", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/cloud-detection/alerts/incident": { path: "/web/api/v2.1/cloud-detection/alerts/incident", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  "/api/s1/cloud-detection/alerts/analyst-verdict": { path: "/web/api/v2.1/cloud-detection/alerts/analyst-verdict", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  // SentinelOne — Application Risk
+  "/api/s1/app-risk/applications": { path: "/web/api/v2.1/application-management/risks/applications", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/app-risk/aggregated": { path: "/web/api/v2.1/application-management/risks/aggregated-applications", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/app-risk/endpoints": { path: "/web/api/v2.1/application-management/risks/endpoints", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/app-inventory": { path: "/web/api/v2.1/application-management/inventory/applications", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // SentinelOne — Threat Intelligence (IOCs)
+  "/api/s1/threat-intelligence/iocs": { path: "/web/api/v2.1/threat-intelligence/iocs", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/threat-intelligence/user-config": { path: "/web/api/v2.1/threat-intelligence/user-config", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // SentinelOne — Activities
+  "/api/s1/activities": { path: "/web/api/v2.1/activities", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // SentinelOne — Exclusions
+  "/api/s1/exclusions": { path: "/web/api/v2.1/exclusions", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // SentinelOne — Deep Visibility (Event Search)
+  "/api/s1/dv/init-query": { path: "/web/api/v2.1/dv/init-query", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken", method: "POST" },
+  "/api/s1/dv/query-status": { path: "/web/api/v2.1/dv/query-status", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/dv/events": { path: "/web/api/v2.1/dv/events", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // SentinelOne — Rogues (Unprotected Endpoints Discovery)
+  "/api/s1/rogues/table-view": { path: "/web/api/v2.1/rogues/table-view", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  "/api/s1/rogues/settings": { path: "/web/api/v2.1/rogues/settings", tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  // LogRhythm SIEM 7.x — Administration API
+  "/api/lr/lists": { path: "/lr-admin-api/lists", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  "/api/lr/entities": { path: "/lr-admin-api/entities", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  "/api/lr/hosts": { path: "/lr-admin-api/hosts", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  "/api/lr/networks": { path: "/lr-admin-api/networks", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  "/api/lr/agents": { path: "/lr-admin-api/agents", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  "/api/lr/logsources": { path: "/lr-admin-api/logsources", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  // LogRhythm SIEM 7.x — Alarm API
+  "/api/lr/alarms": { path: "/lr-alarm-api/alarms", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  // LogRhythm SIEM 7.x — Drilldown API
+  "/api/lr/drilldown": { path: "/lr-drilldown-cache-api/drilldown", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  // LogRhythm SIEM 7.x — Case API
+  "/api/lr/cases": { path: "/lr-case-api/cases", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer" },
+  // LogRhythm SIEM 7.x — Search API
+  "/api/lr/search": { path: "/lr-search-api/actions/search-task", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer", method: "POST" },
+  "/api/lr/search-results": { path: "/lr-search-api/actions/search-result", tokenHeader: "X-LR-Token", urlHeader: "X-LR-Url", authScheme: "Bearer", method: "POST" },
+};
+
+// Dynamic route patterns for parameterized paths
+const DYNAMIC_ROUTES = [
+  { pattern: /^\/api\/s1\/threats\/([^/]+)\/timeline$/, path: (id) => `/web/api/v2.1/threats/${id}/timeline`, tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  { pattern: /^\/api\/s1\/threats\/([^/]+)\/explore\/events$/, path: (id) => `/web/api/v2.1/threats/${id}/explore/events`, tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  { pattern: /^\/api\/s1\/threats\/([^/]+)\/whitening-options$/, path: (id) => `/web/api/v2.1/threats/${id}/whitening-options`, tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+  { pattern: /^\/api\/s1\/threats\/([^/]+)\/download-from-cloud$/, path: (id) => `/web/api/v2.1/threats/${id}/download-from-cloud`, tokenHeader: "X-S1-Token", urlHeader: "X-S1-Url", authScheme: "APIToken" },
+];
+
+function sendJson(res, status, body) {
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-S1-Token, X-S1-Url, X-LR-Token, X-LR-Url, X-LR-SQL-Server, X-LR-SQL-User, X-LR-SQL-Pass, X-Abusech-Api-Key, X-ABUSEIPDB-KEY",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  });
+  res.end(JSON.stringify(body));
+}
+
+function proxyRequest(targetUrl, apiToken, queryString, authScheme, method, body) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(targetUrl);
+    if (queryString) parsed.search = queryString;
+
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || 443,
+      path: parsed.pathname + parsed.search,
+      method: method || "GET",
+      headers: {
+        "Authorization": `${authScheme} ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      rejectUnauthorized: false,
+      secureProtocol: "TLSv1_2_method",
+    };
+
+    if (body) {
+      options.headers["Content-Length"] = Buffer.byteLength(body);
+    }
+
+    const client = parsed.protocol === "https:" ? https : http;
+    const req = client.request(options, (proxyRes) => {
+      let data = "";
+      proxyRes.on("data", (chunk) => (data += chunk));
+      proxyRes.on("end", () => {
+        try {
+          resolve({ status: proxyRes.statusCode, body: JSON.parse(data) });
+        } catch {
+          resolve({ status: proxyRes.statusCode, body: { raw: data } });
+        }
+      });
+    });
+
+    req.on("error", (err) => reject(err));
+    req.setTimeout(30000, () => {
+      req.destroy();
+      reject(new Error("Request timed out"));
+    });
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-S1-Token, X-S1-Url, X-LR-Token, X-LR-Url, X-LR-SQL-Server, X-LR-SQL-User, X-LR-SQL-Pass, X-Abusech-Api-Key, X-ABUSEIPDB-KEY",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    });
+    return res.end();
+  }
+
+  const parsed = url.parse(req.url, true);
+  const pathname = parsed.pathname;
+
+  // Health check
+  if (pathname === "/api" || pathname === "/api/") {
+    return sendJson(res, 200, { status: "ok", routes: [...Object.keys(ROUTES), "/api/geoip", "/api/auth/*", "/api/admin/*"] });
+  }
+
+  // ── Auth Routes ──
+  if (pathname === "/api/auth/login" && req.method === "POST") {
+    let body = "";
+    await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+    try {
+      const { username, password } = JSON.parse(body);
+      const user = authData.users.find((u) => u.username === username);
+      if (!user || !verifyPassword(password, user.passwordHash)) {
+        addAuditEntry("login_failed", username || "unknown", null, "Invalid credentials");
+        return sendJson(res, 401, { error: "Invalid username or password" });
+      }
+      if (!user.enabled) {
+        addAuditEntry("login_failed", username, null, "Account disabled");
+        return sendJson(res, 403, { error: "Account disabled" });
+      }
+      const role = authData.roles.find((r) => r.id === user.roleId);
+      const token = createJwt({ userId: user.id, username: user.username, roleId: user.roleId });
+      user.lastLogin = new Date().toISOString();
+      saveData(authData);
+      addAuditEntry("login", user.username, null, `Role: ${role?.name}`);
+      return sendJson(res, 200, {
+        token,
+        user: { id: user.id, username: user.username, email: user.email, roleId: user.roleId, roleName: role?.name, enabled: user.enabled, createdAt: user.createdAt, lastLogin: user.lastLogin, scopes: role?.scopes ?? [] },
+      });
+    } catch { return sendJson(res, 400, { error: "Invalid request body" }); }
+  }
+
+  // ── Change Password (any authenticated user) ──
+  if (pathname === "/api/auth/change-password" && req.method === "POST") {
+    const payload = getAuthUser(req);
+    if (!payload) return sendJson(res, 401, { error: "Unauthorized" });
+    let body = "";
+    await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+    try {
+      const { currentPassword, newPassword } = JSON.parse(body);
+      const user = authData.users.find((u) => u.id === payload.userId);
+      if (!user) return sendJson(res, 404, { error: "User not found" });
+      if (!verifyPassword(currentPassword, user.passwordHash)) {
+        addAuditEntry("password_change_failed", user.username, null, "Wrong current password");
+        return sendJson(res, 401, { error: "Current password is incorrect" });
+      }
+      user.passwordHash = hashPassword(newPassword);
+      saveData(authData);
+      addAuditEntry("password_changed", user.username);
+      return sendJson(res, 200, { ok: true });
+    } catch { return sendJson(res, 400, { error: "Invalid request" }); }
+  }
+
+  if (pathname === "/api/auth/me" && req.method === "GET") {
+    const payload = getAuthUser(req);
+    if (!payload) return sendJson(res, 401, { error: "Unauthorized" });
+    const user = authData.users.find((u) => u.id === payload.userId);
+    if (!user) return sendJson(res, 401, { error: "User not found" });
+    const role = authData.roles.find((r) => r.id === user.roleId);
+    return sendJson(res, 200, {
+      user: { id: user.id, username: user.username, email: user.email, roleId: user.roleId, roleName: role?.name, enabled: user.enabled, createdAt: user.createdAt, lastLogin: user.lastLogin, scopes: role?.scopes ?? [] },
+    });
+  }
+
+  // ── Admin Routes (require admin.users or admin.roles scope) ──
+  if (pathname.startsWith("/api/admin/")) {
+    const payload = getAuthUser(req);
+    if (!payload) return sendJson(res, 401, { error: "Unauthorized" });
+    const adminUser = authData.users.find((u) => u.id === payload.userId);
+    const adminRole = authData.roles.find((r) => r.id === adminUser?.roleId);
+    const adminScopes = adminRole?.scopes ?? [];
+    const isAdmin = adminScopes.includes("admin.users") || adminScopes.includes("admin.roles");
+    if (!isAdmin) return sendJson(res, 403, { error: "Insufficient permissions" });
+
+    // GET /api/admin/users
+    if (pathname === "/api/admin/users" && req.method === "GET") {
+      const users = authData.users.map((u) => {
+        const role = authData.roles.find((r) => r.id === u.roleId);
+        return { id: u.id, username: u.username, email: u.email, roleId: u.roleId, roleName: role?.name, enabled: u.enabled, createdAt: u.createdAt, lastLogin: u.lastLogin };
+      });
+      return sendJson(res, 200, users);
+    }
+
+    // POST /api/admin/users
+    if (pathname === "/api/admin/users" && req.method === "POST") {
+      let body = "";
+      await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+      try {
+        const { username, email, password, roleId } = JSON.parse(body);
+        if (!username || !password || !roleId) return sendJson(res, 400, { error: "username, password, roleId required" });
+        if (authData.users.find((u) => u.username === username)) return sendJson(res, 409, { error: "Username already exists" });
+        const newUser = { id: crypto.randomUUID(), username, email: email || "", passwordHash: hashPassword(password), roleId, enabled: true, createdAt: new Date().toISOString() };
+        authData.users.push(newUser);
+        saveData(authData);
+        addAuditEntry("user_created", adminUser.username, username, `Role: ${authData.roles.find(r => r.id === roleId)?.name}`);
+        return sendJson(res, 201, { id: newUser.id });
+      } catch { return sendJson(res, 400, { error: "Invalid request" }); }
+    }
+
+    // PUT /api/admin/users/:id
+    const userMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (userMatch && req.method === "PUT") {
+      let body = "";
+      await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+      try {
+        const updates = JSON.parse(body);
+        const user = authData.users.find((u) => u.id === userMatch[1]);
+        if (!user) return sendJson(res, 404, { error: "User not found" });
+        if (updates.enabled !== undefined) user.enabled = updates.enabled;
+        if (updates.roleId) user.roleId = updates.roleId;
+        if (updates.email !== undefined) user.email = updates.email;
+        if (updates.password) user.passwordHash = hashPassword(updates.password);
+        saveData(authData);
+        const changes = Object.keys(updates).filter(k => k !== 'password').join(', ');
+        addAuditEntry("user_updated", adminUser.username, user.username, changes || "password reset");
+        return sendJson(res, 200, { ok: true });
+      } catch { return sendJson(res, 400, { error: "Invalid request" }); }
+    }
+
+    // DELETE /api/admin/users/:id
+    if (userMatch && req.method === "DELETE") {
+      const delUser = authData.users.find((u) => u.id === userMatch[1]);
+      authData.users = authData.users.filter((u) => u.id !== userMatch[1]);
+      saveData(authData);
+      addAuditEntry("user_deleted", adminUser.username, delUser?.username);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // GET /api/admin/roles
+    if (pathname === "/api/admin/roles" && req.method === "GET") {
+      return sendJson(res, 200, authData.roles);
+    }
+
+    // POST /api/admin/roles
+    if (pathname === "/api/admin/roles" && req.method === "POST") {
+      let body = "";
+      await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+      try {
+        const { name, description, scopes } = JSON.parse(body);
+        if (!name) return sendJson(res, 400, { error: "Role name required" });
+        if (authData.roles.find((r) => r.name === name)) return sendJson(res, 409, { error: "Role already exists" });
+        const newRole = { id: `role-${crypto.randomUUID().slice(0, 8)}`, name, description: description || "", scopes: scopes || [], isBuiltin: false };
+        authData.roles.push(newRole);
+        saveData(authData);
+        addAuditEntry("role_created", adminUser.username, null, `Role: ${name}`);
+        return sendJson(res, 201, { id: newRole.id });
+      } catch { return sendJson(res, 400, { error: "Invalid request" }); }
+    }
+
+    // PUT /api/admin/roles/:id
+    const roleMatch = pathname.match(/^\/api\/admin\/roles\/([^/]+)$/);
+    if (roleMatch && req.method === "PUT") {
+      let body = "";
+      await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+      try {
+        const updates = JSON.parse(body);
+        const role = authData.roles.find((r) => r.id === roleMatch[1]);
+        if (!role) return sendJson(res, 404, { error: "Role not found" });
+        if (updates.description !== undefined) role.description = updates.description;
+        if (updates.scopes) role.scopes = updates.scopes;
+        if (!role.isBuiltin && updates.name) role.name = updates.name;
+        saveData(authData);
+        addAuditEntry("role_updated", adminUser.username, null, `Role: ${role.name}`);
+        return sendJson(res, 200, { ok: true });
+      } catch { return sendJson(res, 400, { error: "Invalid request" }); }
+    }
+
+    // DELETE /api/admin/roles/:id
+    if (roleMatch && req.method === "DELETE") {
+      const delRole = authData.roles.find((r) => r.id === roleMatch[1]);
+      if (delRole?.isBuiltin) return sendJson(res, 400, { error: "Cannot delete built-in role" });
+      authData.roles = authData.roles.filter((r) => r.id !== roleMatch[1]);
+      saveData(authData);
+      addAuditEntry("role_deleted", adminUser.username, null, `Role: ${delRole?.name}`);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // GET /api/admin/audit-log
+    if (pathname === "/api/admin/audit-log" && req.method === "GET") {
+      return sendJson(res, 200, loadAuditLog());
+    }
+
+    return sendJson(res, 404, { error: "Admin route not found" });
+  }
+
+  // GeoIP batch proxy
+  if (pathname === "/api/geoip" && req.method === "POST") {
+    let body = "";
+    await new Promise((resolve) => {
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", resolve);
+    });
+
+    try {
+      const ips = JSON.parse(body);
+      if (!Array.isArray(ips)) return sendJson(res, 400, { error: "Expected JSON array of IPs" });
+      // Resolve via ip-api.com batch endpoint (HTTP, server-side, city-level accuracy)
+      // ip-api.com batch supports up to 100 IPs per request with detailed fields
+      const fields = "status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query";
+      const batches = [];
+      for (let i = 0; i < ips.length; i += 100) {
+        batches.push(ips.slice(i, i + 100));
+      }
+      const result = [];
+      for (const batch of batches) {
+        const batchResult = await new Promise((resolve) => {
+          const postData = JSON.stringify(batch.map(ip => ({ query: ip, fields, lang: "en" })));
+          const options = {
+            hostname: "ip-api.com",
+            path: "/batch",
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(postData) },
+          };
+          const geoReq = http.request(options, (geoRes) => {
+            let data = "";
+            geoRes.on("data", (chunk) => (data += chunk));
+            geoRes.on("end", () => {
+              try { resolve(JSON.parse(data)); }
+              catch { resolve(batch.map(ip => ({ query: ip, status: "fail" }))); }
+            });
+          });
+          geoReq.on("error", () => resolve(batch.map(ip => ({ query: ip, status: "fail" }))));
+          geoReq.setTimeout(15000, () => { geoReq.destroy(); resolve(batch.map(ip => ({ query: ip, status: "fail" }))); });
+          geoReq.write(postData);
+          geoReq.end();
+        });
+        result.push(...batchResult);
+      }
+
+      return sendJson(res, 200, result);
+    } catch (err) {
+      console.error("[PROXY] GeoIP error:", err.message);
+      return sendJson(res, 502, { error: "GeoIP lookup failed", details: err.message });
+    }
+  }
+
+  // Schema discovery — list tables in LogRhythm_Alarms DB
+  if (pathname === "/api/lr/schema" && req.method === "GET") {
+    const sqlServer = req.headers["x-lr-sql-server"];
+    const sqlUser = req.headers["x-lr-sql-user"];
+    const sqlPass = req.headers["x-lr-sql-pass"];
+    if (sqlServer && sqlUser && sqlPass) {
+      try {
+        const sql = require("mssql");
+        const dbs = ["LogRhythm_Alarms", "LogRhythm_EMDB", "LogRhythm_Events", "LogRhythmEMDB"];
+        const dbParam = parsed.query.db;
+        const targetDb = dbParam && dbs.includes(dbParam) ? dbParam : "LogRhythm_Alarms";
+        const pool = await sql.connect({
+          server: sqlServer, user: sqlUser, password: sqlPass,
+          database: targetDb,
+          options: { encrypt: false, trustServerCertificate: true },
+          connectionTimeout: 10000, requestTimeout: 15000,
+        });
+        const result = await pool.request().query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME`);
+        await pool.close();
+        return sendJson(res, 200, { tables: result.recordset.map(r => r.TABLE_NAME) });
+      } catch (err) {
+        return sendJson(res, 500, { error: err.message });
+      }
+    }
+    return sendJson(res, 400, { error: "SQL credentials required" });
+  }
+
+  // Direct SQL alarms — bypasses broken Alarm API
+  if (pathname === "/api/lr/alarms") {
+    const sqlServer = req.headers["x-lr-sql-server"];
+    const sqlUser = req.headers["x-lr-sql-user"];
+    const sqlPass = req.headers["x-lr-sql-pass"];
+
+    if (sqlServer && sqlUser && sqlPass) {
+      try {
+        const sql = require("mssql");
+        const pool = await sql.connect({
+          server: sqlServer, user: sqlUser, password: sqlPass,
+          database: "LogRhythm_Alarms",
+          options: { encrypt: false, trustServerCertificate: true },
+          connectionTimeout: 10000, requestTimeout: 15000,
+        });
+        const count = parsed.query.count || 100;
+        let result;
+        try {
+          result = await pool.request().query(`
+            SELECT TOP ${parseInt(count)}
+              a.AlarmID as alarmId, a.AlarmRuleID,
+              r.Name as alarmRuleName, r.ShortDescription as alarmRuleDescription,
+              a.AlarmDate as alarmDate, a.DateInserted as dateInserted,
+              a.AlarmStatus as alarmStatus, a.EntityID as entityId,
+              e.Name as entityName, a.DateUpdated as dateUpdated
+            FROM LogRhythm_Alarms.dbo.Alarm a
+            LEFT JOIN LogRhythmEMDB.dbo.AlarmRule r ON a.AlarmRuleID = r.AlarmRuleID
+            LEFT JOIN LogRhythmEMDB.dbo.Entity e ON a.EntityID = e.EntityID
+            ORDER BY a.DateInserted DESC
+          `);
+        } catch (err1a) {
+          console.log("[PROXY] Tier 1a failed:", err1a.message);
+          try {
+            result = await pool.request().query(`
+              SELECT TOP ${parseInt(count)}
+                a.AlarmID as alarmId, a.AlarmRuleID,
+                r.Name as alarmRuleName,
+                a.AlarmDate as alarmDate, a.DateInserted as dateInserted,
+                a.AlarmStatus as alarmStatus, a.EntityID as entityId,
+                e.Name as entityName, a.DateUpdated as dateUpdated
+              FROM LogRhythm_Alarms.dbo.Alarm a
+              LEFT JOIN LogRhythmEMDB.dbo.AlarmRule r ON a.AlarmRuleID = r.AlarmRuleID
+              LEFT JOIN LogRhythmEMDB.dbo.Entity e ON a.EntityID = e.EntityID
+              ORDER BY a.DateInserted DESC
+            `);
+          } catch (err1b) {
+            console.log("[PROXY] Tier 1b failed:", err1b.message);
+            try {
+              result = await pool.request().query(`
+                SELECT TOP ${parseInt(count)}
+                  a.AlarmID as alarmId, a.AlarmRuleID,
+                  r.Name as alarmRuleName,
+                  a.AlarmDate as alarmDate, a.DateInserted as dateInserted,
+                  a.AlarmStatus as alarmStatus, a.EntityID as entityId,
+                  a.DateUpdated as dateUpdated
+                FROM LogRhythm_Alarms.dbo.Alarm a
+                LEFT JOIN LogRhythmEMDB.dbo.AlarmRule r ON a.AlarmRuleID = r.AlarmRuleID
+                ORDER BY a.DateInserted DESC
+              `);
+            } catch (ruleErr) {
+              console.log("[PROXY] Tier 2 failed:", ruleErr.message);
+              result = await pool.request().query(`
+                SELECT TOP ${parseInt(count)}
+                  AlarmID as alarmId, AlarmRuleID, EntityID as entityId,
+                  AlarmDate as alarmDate, DateInserted as dateInserted,
+                  DateUpdated as dateUpdated, AlarmStatus as alarmStatus
+                FROM LogRhythm_Alarms.dbo.Alarm ORDER BY DateInserted DESC
+              `);
+            }
+          }
+        }
+        await pool.close();
+        return sendJson(res, 200, { alarmsSearchDetails: result.recordset });
+      } catch (err) {
+        console.error("[PROXY] Direct SQL alarm query failed:", err.message, err.stack);
+        return sendJson(res, 500, { error: "SQL alarm query failed: " + err.message });
+      }
+    }
+    return sendJson(res, 400, { error: "SQL credentials required for alarms endpoint" });
+  }
+
+  // ── External Threat Intel Feeds (CORS proxy) ──
+
+  // CISA Known Exploited Vulnerabilities (follows redirects)
+  if (pathname === "/api/feeds/cisa-kev") {
+    const cisaFetch = (url, maxRedirects = 5) => new Promise((resolve, reject) => {
+      if (maxRedirects <= 0) return reject(new Error("Too many redirects"));
+      https.get(url, (feedRes) => {
+        if ([301, 302, 303, 307, 308].includes(feedRes.statusCode) && feedRes.headers.location) {
+          return cisaFetch(feedRes.headers.location, maxRedirects - 1).then(resolve, reject);
+        }
+        let data = "";
+        feedRes.on("data", (chunk) => (data += chunk));
+        feedRes.on("end", () => {
+          try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error", raw: data.slice(0, 200) }); }
+        });
+      }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+    });
+    try {
+      const result = await cisaFetch("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json");
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "CISA KEV fetch failed", details: String(err) });
+    }
+  }
+
+  // Abuse.ch ThreatFox — recent IOCs
+  if (pathname === "/api/feeds/threatfox" && req.method === "POST") {
+    let body = "";
+    await new Promise((resolve) => { req.on("data", (c) => (body += c)); req.on("end", resolve); });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        let parsed = {};
+        try { parsed = JSON.parse(body); } catch {}
+        const query = parsed.query || "get_iocs";
+        const days = parsed.days || 1;
+        const postData = JSON.stringify({ query, days });
+        const authKey = req.headers["x-abusech-api-key"] || "";
+        const hdrs = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(postData) };
+        if (authKey) hdrs["Auth-Key"] = authKey;
+        const options = {
+          hostname: "threatfox-api.abuse.ch", path: "/api/v1/", method: "POST",
+          headers: hdrs,
+        };
+        console.log("[ThreatFox] Proxying request:", { query, days, hasAuthKey: !!authKey });
+        const feedReq = https.request(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            console.log("[ThreatFox] Response status:", feedRes.statusCode, "length:", data.length);
+            try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error", raw: data.slice(0, 500) }); }
+          });
+        });
+        feedReq.on("error", reject);
+        feedReq.setTimeout(15000, () => { feedReq.destroy(); reject(new Error("Timeout")); });
+        feedReq.write(postData);
+        feedReq.end();
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "ThreatFox fetch failed", details: err.message });
+    }
+  }
+
+  // Reddit r/netsec JSON feed
+  if (pathname === "/api/feeds/reddit-netsec") {
+    try {
+      const limit = parsed.query.limit || 50;
+      const result = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: "www.reddit.com", path: `/r/netsec/.json?limit=${limit}&raw_json=1`,
+          headers: { "User-Agent": "SOC-Dashboard/1.0" },
+        };
+        https.get(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error" }); }
+          });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "Reddit fetch failed", details: err.message });
+    }
+  }
+
+  // NVD (NIST) — Recent CVEs (API 2.0)
+  if (pathname === "/api/feeds/nvd") {
+    try {
+      const rpp = parsed.query.resultsPerPage || 20;
+      const pubStartDate = parsed.query.pubStartDate || "";
+      const pubEndDate = parsed.query.pubEndDate || "";
+      const nvdApiKey = req.headers["apikey"] || "";
+      const headers = { "User-Agent": "SOC-Dashboard/1.0" };
+      if (nvdApiKey) headers["apiKey"] = nvdApiKey;
+
+      let apiPath = `/rest/json/cves/2.0?resultsPerPage=${rpp}`;
+      if (pubStartDate) apiPath += `&pubStartDate=${encodeURIComponent(pubStartDate)}`;
+      if (pubEndDate) apiPath += `&pubEndDate=${encodeURIComponent(pubEndDate)}`;
+
+      const result = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: "services.nvd.nist.gov",
+          path: apiPath,
+          headers,
+        };
+        https.get(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error", raw: data.slice(0, 200) }); } });
+        }).on("error", reject).setTimeout(30000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "NVD fetch failed", details: String(err) });
+    }
+  }
+
+  // AlienVault OTX — Subscribed Pulses
+  if (pathname === "/api/feeds/otx") {
+    const otxKey = req.headers["x-otx-api-key"];
+    if (!otxKey) return sendJson(res, 400, { error: "OTX API key required" });
+    try {
+      const limit = parsed.query.limit || 20;
+      const result = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: "otx.alienvault.com",
+          path: `/api/v1/pulses/subscribed?limit=${limit}&modified_since=2024-01-01`,
+          headers: { "X-OTX-API-KEY": otxKey, "User-Agent": "SOC-Dashboard/1.0" },
+        };
+        https.get(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error" }); } });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "OTX fetch failed", details: err.message });
+    }
+  }
+
+  // Abuse.ch URLhaus — Recent URLs
+  if (pathname === "/api/feeds/urlhaus") {
+    try {
+      const authKey = req.headers["x-abusech-api-key"] || "";
+      const limit = parsed.query.limit || "100";
+      const result = await new Promise((resolve, reject) => {
+        const reqPath = `/v1/urls/recent/limit/${limit}/`;
+        const hdrs = { "Accept": "application/json" };
+        if (authKey) hdrs["Auth-Key"] = authKey;
+        const options = {
+          hostname: "urlhaus-api.abuse.ch", path: reqPath, method: "GET",
+          headers: hdrs,
+        };
+        console.log("[URLhaus] GET", reqPath, "hasAuthKey:", !!authKey);
+        const feedReq = https.request(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            console.log("[URLhaus] Response status:", feedRes.statusCode, "length:", data.length);
+            try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error", raw: data.slice(0, 500) }); }
+          });
+        });
+        feedReq.on("error", reject);
+        feedReq.setTimeout(15000, () => { feedReq.destroy(); reject(new Error("Timeout")); });
+        feedReq.end();
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "URLhaus fetch failed", details: err.message });
+    }
+  }
+
+  // Abuse.ch MalwareBazaar — Recent Samples
+  if (pathname === "/api/feeds/malwarebazaar" && req.method === "POST") {
+    let body = "";
+    await new Promise((resolve) => { req.on("data", (c) => (body += c)); req.on("end", resolve); });
+    try {
+      let parsed = {};
+      try { parsed = JSON.parse(body); } catch {}
+      const query = parsed.query || "get_recent";
+      const selector = parsed.selector || "time";
+      const authKey = req.headers["x-abusech-api-key"] || "";
+      const postData = `query=${encodeURIComponent(query)}&selector=${encodeURIComponent(selector)}`;
+      const hdrs = { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": Buffer.byteLength(postData) };
+      if (authKey) hdrs["Auth-Key"] = authKey;
+      const result = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: "mb-api.abuse.ch", path: "/api/v1/", method: "POST",
+          headers: hdrs,
+        };
+        console.log("[MalwareBazaar] Proxying request, hasAuthKey:", !!authKey);
+        const feedReq = https.request(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            console.log("[MalwareBazaar] Response status:", feedRes.statusCode, "length:", data.length);
+            try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error", raw: data.slice(0, 500) }); }
+          });
+        });
+        feedReq.on("error", reject);
+        feedReq.setTimeout(15000, () => { feedReq.destroy(); reject(new Error("Timeout")); });
+        feedReq.write(postData);
+        feedReq.end();
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "MalwareBazaar fetch failed", details: err.message });
+    }
+  }
+
+  // CIRCL — EPSS scores
+  if (pathname === "/api/feeds/circl-epss") {
+    try {
+      const cveId = parsed.query.cve || "";
+      const circlApiKey = req.headers["x-circl-api-key"] || "";
+      const headers = { "User-Agent": "SOC-Dashboard/1.0", "Accept": "application/json" };
+      if (circlApiKey) headers["Authorization"] = `Bearer ${circlApiKey}`;
+      const result = await new Promise((resolve, reject) => {
+        https.get({
+          hostname: "vulnerability.circl.lu",
+          path: `/api/epss/${encodeURIComponent(cveId)}`,
+          headers,
+        }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve({}); } });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "CIRCL EPSS fetch failed", details: String(err) });
+    }
+  }
+
+  // CIRCL — CVE Search (single vulnerability lookup)
+  if (pathname === "/api/feeds/circl-cve") {
+    try {
+      const cveId = parsed.query.id || "";
+      const circlApiKey = req.headers["x-circl-api-key"] || "";
+      const headers = { "User-Agent": "SOC-Dashboard/1.0", "Accept": "application/json" };
+      if (circlApiKey) headers["Authorization"] = `Bearer ${circlApiKey}`;
+      const result = await new Promise((resolve, reject) => {
+        https.get({
+          hostname: "vulnerability.circl.lu",
+          path: `/api/vulnerability/${encodeURIComponent(cveId)}`,
+          headers,
+        }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve({}); } });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "CIRCL CVE search failed", details: String(err) });
+    }
+  }
+
+  // CIRCL — CISA KEV (alternative source)
+  if (pathname === "/api/feeds/circl-kev") {
+    try {
+      const circlApiKey = req.headers["x-circl-api-key"] || "";
+      const headers = { "User-Agent": "SOC-Dashboard/1.0", "Accept": "application/json" };
+      if (circlApiKey) headers["Authorization"] = `Bearer ${circlApiKey}`;
+      const result = await new Promise((resolve, reject) => {
+        https.get({
+          hostname: "vulnerability.circl.lu",
+          path: "/api/cisa_kev/recent",
+          headers,
+        }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve([]); } });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "CIRCL KEV fetch failed", details: String(err) });
+    }
+  }
+
+  // CIRCL — Recent CVEs (new Vulnerability-Lookup API)
+  if (pathname === "/api/feeds/circl") {
+    try {
+      const limit = parseInt(parsed.query.limit) || 30;
+      const circlApiKey = req.headers["x-circl-api-key"] || "";
+      const headers = { "User-Agent": "SOC-Dashboard/1.0", "Accept": "application/json" };
+      if (circlApiKey) headers["Authorization"] = `Bearer ${circlApiKey}`;
+      const result = await new Promise((resolve, reject) => {
+        https.get({
+          hostname: "vulnerability.circl.lu",
+          path: `/api/last`,
+          headers,
+        }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            try { resolve(JSON.parse(data)); }
+            catch { resolve([]); }
+          });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "CIRCL fetch failed", details: err.message });
+    }
+  }
+
+  // VirusTotal — Auto-detect: try premium search first, fallback to free-tier domain lookups
+  if (pathname === "/api/feeds/virustotal") {
+    const vtKey = req.headers["x-vt-api-key"];
+    if (!vtKey) return sendJson(res, 400, { error: "VirusTotal API key required" });
+    try {
+      // Try premium search first
+      const premiumResult = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: "www.virustotal.com",
+          path: "/api/v3/intelligence/search?query=type:file%20p:5%2B&limit=20",
+          headers: { "x-apikey": vtKey, "User-Agent": "SOC-Dashboard/1.0" },
+        };
+        https.get(options, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            try { resolve({ status: feedRes.statusCode, body: JSON.parse(data) }); }
+            catch { resolve({ status: 500, body: null }); }
+          });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+
+      // If premium works (200), return it
+      if (premiumResult.status === 200 && premiumResult.body?.data?.length > 0) {
+        console.log("[VT] Premium search returned", premiumResult.body.data.length, "results");
+        return sendJson(res, 200, { data: premiumResult.body.data, tier: "premium" });
+      }
+
+      // Fallback: free-tier domain lookups
+      console.log("[VT] Premium unavailable (status:", premiumResult.status, "), falling back to free-tier domain lookups");
+      const targets = [
+        "malware.wicar.org", "testphishing.com", "evil.com", "suspicious.com",
+        "ransomware.bit", "phishing-test.com", "malwaretraffic.com",
+      ];
+      const customTarget = parsed.query.target;
+      if (customTarget) targets.unshift(customTarget);
+
+      const results = [];
+      for (const domain of targets.slice(0, 8)) {
+        try {
+          const item = await new Promise((resolve, reject) => {
+            https.get({
+              hostname: "www.virustotal.com",
+              path: `/api/v3/domains/${encodeURIComponent(domain)}`,
+              headers: { "x-apikey": vtKey, "User-Agent": "SOC-Dashboard/1.0" },
+            }, (feedRes) => {
+              let data = "";
+              feedRes.on("data", (chunk) => (data += chunk));
+              feedRes.on("end", () => {
+                try { resolve({ status: feedRes.statusCode, ...JSON.parse(data) }); }
+                catch { resolve(null); }
+              });
+            }).on("error", () => resolve(null)).setTimeout(10000, function() { this.destroy(); resolve(null); });
+          });
+          if (item && item.data) results.push(item.data);
+        } catch {}
+        await new Promise(r => setTimeout(r, 500));
+      }
+      return sendJson(res, 200, { data: results, tier: "free" });
+    } catch (err) {
+      return sendJson(res, 502, { error: "VirusTotal fetch failed", details: err.message });
+    }
+  }
+
+  // AbuseIPDB — Blacklist (most reported IPs)
+  if (pathname === "/api/feeds/abuseipdb-blacklist") {
+    const apiKey = req.headers["x-abuseipdb-key"];
+    if (!apiKey) return sendJson(res, 400, { error: "AbuseIPDB API key required" });
+    try {
+      const confidenceMinimum = parsed.query.confidenceMinimum || "90";
+      const limit = parsed.query.limit || "50";
+      const result = await new Promise((resolve, reject) => {
+        const reqPath = `/api/v2/blacklist?confidenceMinimum=${confidenceMinimum}&limit=${limit}`;
+        https.get({
+          hostname: "api.abuseipdb.com",
+          path: reqPath,
+          headers: { "Key": apiKey, "Accept": "application/json" },
+        }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            console.log("[AbuseIPDB] Blacklist response status:", feedRes.statusCode, "length:", data.length);
+            try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error" }); }
+          });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "AbuseIPDB blacklist failed", details: err.message });
+    }
+  }
+
+  // AbuseIPDB — Check (single IP lookup)
+  if (pathname === "/api/feeds/abuseipdb-check") {
+    const apiKey = req.headers["x-abuseipdb-key"];
+    if (!apiKey) return sendJson(res, 400, { error: "AbuseIPDB API key required" });
+    try {
+      const ip = parsed.query.ip || "";
+      const maxAge = parsed.query.maxAgeInDays || "90";
+      const reqPath = `/api/v2/check?ipAddress=${encodeURIComponent(ip)}&maxAgeInDays=${maxAge}&verbose`;
+      const result = await new Promise((resolve, reject) => {
+        https.get({
+          hostname: "api.abuseipdb.com",
+          path: reqPath,
+          headers: { "Key": apiKey, "Accept": "application/json" },
+        }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            console.log("[AbuseIPDB] Check response status:", feedRes.statusCode);
+            try { resolve(JSON.parse(data)); } catch { resolve({ error: "Parse error" }); }
+          });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 502, { error: "AbuseIPDB check failed", details: err.message });
+    }
+  }
+
+  // Shodan — Auto-detect: try vuln search (paid), fallback to port search (free)
+  if (pathname === "/api/feeds/shodan") {
+    const shodanKey = req.headers["x-shodan-key"];
+    if (!shodanKey) return sendJson(res, 400, { error: "Shodan API key required" });
+    try {
+      const userQuery = parsed.query.query;
+      // If user provided a query, use it directly
+      const query = userQuery || "vuln:cve-2024";
+      const result = await new Promise((resolve, reject) => {
+        const shodanPath = `/shodan/host/search?key=${shodanKey}&query=${encodeURIComponent(query)}`;
+        https.get({ hostname: "api.shodan.io", path: shodanPath }, (feedRes) => {
+          let data = "";
+          feedRes.on("data", (chunk) => (data += chunk));
+          feedRes.on("end", () => {
+            try { resolve({ status: feedRes.statusCode, body: JSON.parse(data) }); }
+            catch { resolve({ status: 500, body: { error: "Parse error" } }); }
+          });
+        }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+      });
+
+      // If paid query works, return it
+      if (result.status === 200 && result.body?.matches) {
+        console.log("[Shodan] Search returned", result.body.matches.length, "results (query:", query, ")");
+        return sendJson(res, 200, { matches: result.body.matches, tier: "paid" });
+      }
+
+      // If 401/403 on vuln query and no custom query, fallback to free-tier port search
+      if (!userQuery && (result.status === 401 || result.status === 403 || result.body?.error)) {
+        console.log("[Shodan] Paid query failed, falling back to free-tier port search");
+        const freeResult = await new Promise((resolve, reject) => {
+          const freePath = `/shodan/host/search?key=${shodanKey}&query=${encodeURIComponent("port:22,3389,445")}`;
+          https.get({ hostname: "api.shodan.io", path: freePath }, (feedRes) => {
+            let data = "";
+            feedRes.on("data", (chunk) => (data += chunk));
+            feedRes.on("end", () => {
+              try { resolve(JSON.parse(data)); }
+              catch { resolve({ error: "Parse error" }); }
+            });
+          }).on("error", reject).setTimeout(15000, function() { this.destroy(); reject(new Error("Timeout")); });
+        });
+        return sendJson(res, 200, { ...freeResult, tier: "free" });
+      }
+
+      return sendJson(res, 200, result.body);
+    } catch (err) {
+      return sendJson(res, 502, { error: "Shodan fetch failed", details: err.message });
+    }
+  }
+
+  // Check static routes first
+  let route = ROUTES[pathname];
+  let resolvedPath = route ? route.path : null;
+
+  // Check dynamic routes if no static match
+  if (!route) {
+    for (const dr of DYNAMIC_ROUTES) {
+      const match = pathname.match(dr.pattern);
+      if (match) {
+        route = dr;
+        resolvedPath = dr.path(match[1]);
+        break;
+      }
+    }
+  }
+
+  if (!route) {
+    return sendJson(res, 404, { error: "Unknown route", available: [...Object.keys(ROUTES), "/api/geoip", "/api/feeds/*"] });
+  }
+
+  const apiToken = req.headers[route.tokenHeader.toLowerCase()];
+  const baseUrl = req.headers[route.urlHeader.toLowerCase()];
+
+  if (!apiToken || !baseUrl) {
+    return sendJson(res, 400, {
+      error: `Missing headers: ${route.tokenHeader} and ${route.urlHeader} are required`,
+    });
+  }
+
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const targetUrl = `${cleanBase}${resolvedPath}`;
+  const authScheme = route.authScheme || "APIToken";
+  const method = route.method || req.method;
+
+  let body = null;
+  if (method === "POST" || method === "DELETE") {
+    body = await new Promise((resolve) => {
+      let data = "";
+      req.on("data", (chunk) => (data += chunk));
+      req.on("end", () => resolve(data || null));
+    });
+  }
+
+  const queryString = parsed.search || "";
+
+  try {
+    console.log(`[PROXY] ${method} ${pathname} -> ${targetUrl}`);
+    if (body && pathname.includes("/lr/search")) {
+      console.log(`[PROXY] Search body (${body.length} bytes):`, body.substring(0, 500));
+    }
+    const result = await proxyRequest(targetUrl, apiToken, queryString, authScheme, method, body);
+    if (pathname.includes("/lr/search")) {
+      console.log(`[PROXY] Search response (${result.status}):`, JSON.stringify(result.body).substring(0, 500));
+    }
+    sendJson(res, result.status, result.body);
+  } catch (err) {
+    console.error(`[PROXY] Error: ${err.message}`);
+    sendJson(res, 502, { error: "Proxy request failed", details: err.message });
+  }
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`[PROXY] SentinelOne/LogRhythm proxy running on http://127.0.0.1:${PORT}`);
+  console.log(`[PROXY] Routes: ${Object.keys(ROUTES).join(", ")}`);
+});
